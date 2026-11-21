@@ -1,80 +1,145 @@
-name: SA ephemeral task validation
+name: SA Ubuntu Linux CI
 
 on:
   push:
     branches:
       - 'task/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: sa-task-${{ github.ref }}
+  group: sa-ubuntu-ci-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  validate:
-    name: Validate public task payload
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  linux:
+    name: Ubuntu 24.04 • Python / Node / Rust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      PYTHONUNBUFFERED: "1"
+      CARGO_TERM_COLOR: always
     steps:
       - name: Checkout task branch
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Record task metadata
+      - name: Ubuntu runner diagnostics
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p results
           {
             echo "repository=${GITHUB_REPOSITORY}"
             echo "ref=${GITHUB_REF}"
             echo "sha=${GITHUB_SHA}"
-            echo "event=${GITHUB_EVENT_NAME}"
-            echo "runner=${RUNNER_OS}"
-          } | tee results/task-metadata.txt
+            echo "runner_os=${RUNNER_OS}"
+            echo "runner_arch=${RUNNER_ARCH}"
+            echo "image_os=${ImageOS:-unknown}"
+            echo "image_version=${ImageVersion:-unknown}"
+            echo
+            cat /etc/os-release
+            echo
+            uname -a
+            echo
+            df -h
+            echo
+            free -h
+          } | tee results/runner-diagnostics.txt
 
-      - name: Python tests (if present)
+      - name: Set up Python
+        if: hashFiles('**/*.py') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: ''
+
+      - name: Python validation
+        if: hashFiles('**/*.py') != ''
         shell: bash
         run: |
+          set -euo pipefail
+          python --version | tee results/python-version.txt
+          python -m compileall -q .
           if find tests -type f -name 'test*.py' -print -quit 2>/dev/null | grep -q .; then
             python -m unittest discover -s tests -p 'test*.py' 2>&1 | tee results/python-tests.log
           else
             echo "SKIP: no Python unittest files found" | tee results/python-tests.log
           fi
 
-      - name: Node tests (if present)
+      - name: Set up Node.js
+        if: hashFiles('**/*.js') != '' || hashFiles('**/*.cjs') != '' || hashFiles('**/*.mjs') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          check-latest: false
+
+      - name: Node.js validation
+        if: hashFiles('**/*.js') != '' || hashFiles('**/*.cjs') != '' || hashFiles('**/*.mjs') != ''
         shell: bash
         run: |
-          if find . -type f \( -name '*.test.js' -o -name '*.test.cjs' -o -name '*.test.mjs' \) -not -path './.git/*' -print -quit | grep -q .; then
+          set -euo pipefail
+          node --version | tee results/node-version.txt
+          npm --version | tee results/npm-version.txt
+          while IFS= read -r file; do
+            node --check "$file"
+          done < <(find . -type f \( -name '*.js' -o -name '*.cjs' -o -name '*.mjs' \) -not -path './.git/*' -not -path './node_modules/*' -print)
+          if find . -type f \( -name '*.test.js' -o -name '*.test.cjs' -o -name '*.test.mjs' \) -not -path './.git/*' -not -path './node_modules/*' -print -quit | grep -q .; then
             node --test 2>&1 | tee results/node-tests.log
           else
             echo "SKIP: no Node test files found" | tee results/node-tests.log
           fi
 
-      - name: Set up stable Rust (if present)
+      - name: Set up stable Rust
         if: hashFiles('Cargo.toml') != ''
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Rust tests (if present)
+      - name: Rust validation
+        if: hashFiles('Cargo.toml') != ''
         shell: bash
         run: |
-          if [ -f Cargo.toml ]; then
-            if [ ! -f Cargo.lock ]; then
-              echo "FAIL: Cargo.lock is required for reproducible public-runner jobs" | tee results/rust-tests.log
-              exit 1
-            fi
-            cargo test --locked 2>&1 | tee results/rust-tests.log
+          set -euo pipefail
+          rustc --version | tee results/rust-version.txt
+          cargo --version | tee results/cargo-version.txt
+          test -f Cargo.lock || { echo "FAIL: Cargo.lock is required" | tee results/rust-tests.log; exit 1; }
+          cargo fmt --all -- --check 2>&1 | tee results/rust-fmt.log
+          cargo clippy --locked --all-targets --all-features -- -D warnings 2>&1 | tee results/rust-clippy.log
+          cargo test --locked --all-targets 2>&1 | tee results/rust-tests.log
+
+      - name: ShellCheck (if shell scripts exist)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find . -type f \( -name '*.sh' -o -name '*.bash' \) -not -path './.git/*' -print -quit | grep -q .; then
+            sudo apt-get update
+            sudo apt-get install --yes shellcheck
+            find . -type f \( -name '*.sh' -o -name '*.bash' \) -not -path './.git/*' -print0 | xargs -0 -r shellcheck
           else
-            echo "SKIP: no Cargo.toml found" | tee results/rust-tests.log
+            echo "SKIP: no shell scripts found"
           fi
 
-      - name: Upload task results
+      - name: Record skipped toolchains
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            [ -f results/python-tests.log ] || echo "Python: no Python sources detected"
+            [ -f results/node-tests.log ] || echo "Node.js: no JavaScript sources detected"
+            [ -f results/rust-tests.log ] || echo "Rust: no Cargo.toml detected"
+          } > results/skipped-toolchains.txt
+
+      - name: Upload Ubuntu CI results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sa-task-results
+          name: sa-ubuntu-linux-ci-results
           path: results/
           if-no-files-found: warn
-          retention-days: 3
+          retention-days: 7
