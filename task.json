@@ -3,7 +3,25 @@
   "source_repository": "SpineAnimator/spine-animator-private",
   "source_commit": "04c29d617ee3a97b2033a773a2dd7a93f8573a6f",
   "purpose": "Run SA Node, Python and Rust validation on free GitHub-hosted Ubuntu Linux.",
-  "required_stages": ["python", "node", "rust", "real-psd", "spine-zip", "official-runtime", "native-editor"],
+  "required_stages": [
+    "python",
+    "node",
+    "rust",
+    "real-psd",
+    "spine-zip",
+    "official-runtime",
+    "native-editor"
+  ],
   "source_assets": "The real PSD is retrieved at runtime from its approved source URL and verified by full SHA-256; no PSD bytes are committed to this public repository.",
-  "status": "bridge-bootstrap-only"
+  "status": "partial-sa-suite-success",
+  "validation": {
+    "workflow_run_id": "44955252151",
+    "commit_sha": "6f09d2488dc6c02e0b0bc7a7b2769ea32b419fe9",
+    "ubuntu": "24.04.5 LTS x86_64",
+    "python": "21 tests passed",
+    "node": "1 passed, 1 skipped (real PSD manifest not supplied to this smoke run)",
+    "rust": "4 tests passed; Clippy passed",
+    "artifact_id": "14727223157",
+    "artifact_retention_days": 7
+  }
 }
