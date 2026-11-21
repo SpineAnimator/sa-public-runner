@@ -1,0 +1,76 @@
+name: SA ephemeral task validation
+
+on:
+  push:
+    branches:
+      - 'task/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sa-task-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate public task payload
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout task branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Record task metadata
+        shell: bash
+        run: |
+          mkdir -p results
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "ref=${GITHUB_REF}"
+            echo "sha=${GITHUB_SHA}"
+            echo "event=${GITHUB_EVENT_NAME}"
+            echo "runner=${RUNNER_OS}"
+          } | tee results/task-metadata.txt
+
+      - name: Python tests (if present)
+        shell: bash
+        run: |
+          if find tests -type f -name 'test*.py' -print -quit 2>/dev/null | grep -q .; then
+            python -m unittest discover -s tests -p 'test*.py' 2>&1 | tee results/python-tests.log
+          else
+            echo "SKIP: no Python unittest files found" | tee results/python-tests.log
+          fi
+
+      - name: Node tests (if present)
+        shell: bash
+        run: |
+          if find . -type f \( -name '*.test.js' -o -name '*.test.cjs' -o -name '*.test.mjs' \) -not -path './.git/*' -print -quit | grep -q .; then
+            node --test 2>&1 | tee results/node-tests.log
+          else
+            echo "SKIP: no Node test files found" | tee results/node-tests.log
+          fi
+
+      - name: Rust tests (if present)
+        shell: bash
+        run: |
+          if [ -f Cargo.toml ]; then
+            if [ ! -f Cargo.lock ]; then
+              echo "FAIL: Cargo.lock is required for reproducible public-runner jobs" | tee results/rust-tests.log
+              exit 1
+            fi
+            cargo test --locked 2>&1 | tee results/rust-tests.log
+          else
+            echo "SKIP: no Cargo.toml found" | tee results/rust-tests.log
+          fi
+
+      - name: Upload task results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa-task-results
+          path: results/
+          if-no-files-found: warn
+          retention-days: 3
