@@ -1,0 +1,13 @@
+{
+  "name": "spine-animator",
+  "version": "1.4.5",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs tests/runtime.test.mjs tests/audit-clgb71-aim.test.mjs",
+    "build:cloud-generator": "node scripts/build-cloud-generator.cjs",
+    "bench:sa-vision": "node scripts/benchmark-sa-vision.cjs"
+  },
+  "devDependencies": {
+    "@esotericsoftware/spine-core": "4.3.13"
+  }
+}
