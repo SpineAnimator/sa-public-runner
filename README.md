@@ -1,14 +1,15 @@
 # SA Public Runner
 
-Free, ephemeral Ubuntu Linux CI workspace for **non-sensitive** task-specific validation.
+Free, ephemeral Ubuntu Linux CI workspace for task-scoped SA code and test validation. This repository is public: every committed task branch and file is publicly readable.
 
 ## Operating model
 
 - Keep `main` limited to this runner contract.
-- Put one task in a short-lived `task/<task-id>` branch.
-- Push only tests and fixtures explicitly safe to publish.
+- Put one SA task in its own `task/<task-id>` branch.
+- Transfer the task's required source modules and tests from the private SA repository into that branch; task code committed here becomes public.
+- Keep account uploads, original customer PSDs, generated ZIPs and videos in the private `spine-animation-library` task vault, not in this public runner.
 - A push to `task/**` starts the Ubuntu 24.04 GitHub-hosted CI workflow.
-- Collect the `sa-ubuntu-linux-ci-results` artifact, then remove the task branch when possible.
+- Collect the `sa-ubuntu-linux-ci-results` artifact (7-day retention); persist approved deliverables separately in the private task vault.
 
 ## Ubuntu CI profile
 
@@ -22,10 +23,11 @@ Free, ephemeral Ubuntu Linux CI workspace for **non-sensitive** task-specific va
 
 ## Safety boundary
 
-Never push private SA source code, credentials, access tokens, private PSDs, customer data,
-licensed Spine Editor binaries/assets, or confidential build outputs here. This is a public
-repository. Workflows receive no repository secrets, use read-only repository permissions,
-and checkout without persisting credentials. Treat task-branch contents as untrusted executable code.
+Do not commit credentials, access tokens, passwords, customer account data, original user uploads,
+licensed Spine Editor binaries/assets, or confidential task deliverables here. Task source modules
+and tests deliberately transferred from the private SA repository are visible to everyone because
+this repository is public. Workflows receive no repository secrets, use read-only repository
+permissions, and checkout without persisting credentials. Treat task-branch contents as untrusted executable code.
 
 This runner validates public fixtures and isolated components. It does not by itself prove
 private-repository integration, PSD extraction fidelity, Spine ZIP correctness, or licensed
