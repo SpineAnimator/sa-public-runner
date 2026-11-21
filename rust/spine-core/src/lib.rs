@@ -67,19 +67,19 @@ pub extern "C" fn two_spine_timeline(start_ms: u32, end_ms: u32, duration_ms: u3
 /// Edges are optional nonessential data in the Spine JSON export format.
 #[no_mangle]
 pub extern "C" fn two_spine_mesh_edge_count(count: u32) -> u32 {
-    u32::from(count <= 2_000_000 && count % 2 == 0)
+    u32::from(count <= 2_000_000 && count.is_multiple_of(2))
 }
 
 /// Both canonical vertex indices and even interleaved-coordinate indices are
 /// encountered in third-party importers. Check bounds without overflowing.
 #[no_mangle]
 pub extern "C" fn two_spine_mesh_edge_index(index: u32, vertices: u32, coordinate_mode: u32) -> u32 {
-    if vertices < 3 || vertices > 1_000_000 {
+    if !(3..=1_000_000).contains(&vertices) {
         return 0;
     }
     match coordinate_mode {
         0 => u32::from(index < vertices),
-        1 => u32::from(index % 2 == 0 && vertices.checked_mul(2).is_some_and(|end| index < end)),
+        1 => u32::from(index.is_multiple_of(2) && vertices.checked_mul(2).is_some_and(|end| index < end)),
         _ => 0,
     }
 }
