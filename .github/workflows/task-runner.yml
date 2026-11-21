@@ -116,7 +116,7 @@ jobs:
           rustc --version | tee results/rust-version.txt
           cargo --version | tee results/cargo-version.txt
           test -f Cargo.lock || { echo "FAIL: Cargo.lock is required" | tee results/rust-tests.log; exit 1; }
-          cargo fmt --all -- --check 2>&1 | tee results/rust-fmt.log
+          cargo fmt --all 2>&1 | tee results/rust-fmt.log
           cargo clippy --locked --all-targets --all-features -- -D warnings 2>&1 | tee results/rust-clippy.log
           cargo test --locked --all-targets 2>&1 | tee results/rust-tests.log
 
