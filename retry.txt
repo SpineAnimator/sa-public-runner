@@ -1,0 +1,1 @@
+Retry CI after normalizing Rust source with rustfmt.
