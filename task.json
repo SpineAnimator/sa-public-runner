@@ -1,0 +1,9 @@
+{
+  "task_id": "sa-core-bridge",
+  "source_repository": "SpineAnimator/spine-animator-private",
+  "source_commit": "04c29d617ee3a97b2033a773a2dd7a93f8573a6f",
+  "purpose": "Run SA Node, Python and Rust validation on free GitHub-hosted Ubuntu Linux.",
+  "required_stages": ["python", "node", "rust", "real-psd", "spine-zip", "official-runtime", "native-editor"],
+  "source_assets": "The real PSD is retrieved at runtime from its approved source URL and verified by full SHA-256; no PSD bytes are committed to this public repository.",
+  "status": "bridge-bootstrap-only"
+}
