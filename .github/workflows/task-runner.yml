@@ -58,6 +58,10 @@ jobs:
           python-version: '3.12'
           cache: ''
 
+      - name: Install Python dependencies
+        if: hashFiles('requirements.txt') != ''
+        run: python -m pip install -r requirements.txt
+
       - name: Python validation
         if: hashFiles('**/*.py') != ''
         shell: bash
@@ -77,6 +81,10 @@ jobs:
         with:
           node-version: '22'
           check-latest: false
+
+      - name: Install Node dependencies
+        if: hashFiles('package-lock.json') != ''
+        run: npm ci --ignore-scripts
 
       - name: Node.js validation
         if: hashFiles('**/*.js') != '' || hashFiles('**/*.cjs') != '' || hashFiles('**/*.mjs') != ''
