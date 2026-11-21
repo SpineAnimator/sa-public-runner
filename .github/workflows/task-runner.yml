@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: sa-task-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -52,6 +52,10 @@ jobs:
           else
             echo "SKIP: no Node test files found" | tee results/node-tests.log
           fi
+
+      - name: Set up stable Rust (if present)
+        if: hashFiles('Cargo.toml') != ''
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Rust tests (if present)
         shell: bash
