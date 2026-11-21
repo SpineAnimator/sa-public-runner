@@ -15,7 +15,7 @@ const PSD_MAGIC_LE: u32 = u32::from_le_bytes(*b"8BPS");
 
 #[no_mangle]
 pub extern "C" fn two_spine_api_version() -> u32 {
-    10400 // major.minor.patch = 1.4.0
+    10400
 }
 
 /// Magic is little-endian ASCII 8BPS; version is big-endian 16-bit PSD v1.
