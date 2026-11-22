@@ -1,0 +1,30 @@
+name: 2Spine Live MCP Acceptance
+
+on:
+  schedule:
+    - cron: '13 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 2spine-live-mcp-acceptance
+  cancel-in-progress: false
+
+jobs:
+  live-mcp:
+    name: Live MCP and PSD integrity acceptance
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Checkout public smoke tests
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run live MCP contract and PSD integrity checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          node tests/live-mcp-source.mjs
