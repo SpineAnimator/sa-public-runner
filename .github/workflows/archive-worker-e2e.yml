@@ -1,0 +1,29 @@
+name: Archive Worker synthetic upload/download SHA gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/archive-worker-e2e.yml'
+      - 'tests/live-archive-upload.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: archive-worker-live-e2e
+  cancel-in-progress: true
+jobs:
+  live-upload-download:
+    name: Synthetic PSD transport smoke (no source artwork)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Upload synthetic PSD, download production URL, compare SHA-256
+        env:
+          SA_ARCHIVE_API_URL: https://spine-archive.spine-animator-f8692224.workers.dev
+        run: node tests/live-archive-upload.mjs
+      - name: State test scope
+        run: echo "::notice::This proves HTTP upload/download byte integrity only; it does not prove real PSD/PSB parsing, Photoshop export, private GitHub storage, or Spine Editor import."
