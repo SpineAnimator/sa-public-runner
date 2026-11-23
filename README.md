@@ -61,3 +61,9 @@ No production deployment has been performed.
 The public workflow now checks the secret store without printing values. Latest run [#45138071384](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45138071384) confirms that **both** `SPINE_LICENSE` and `SPINE_LINUX_URL` are absent from `SpineAnimator/sa-public-runner`. Therefore the native Editor install/import/render steps were skipped and the report records `blocked_missing_public_runner_secrets`. The runtime/PSD pipeline still passed; this is not a native Editor pass. No private GitHub Actions were used.
 
 To unblock on the public runner, add those two values as repository secrets under **Settings → Secrets and variables → Actions** in `SpineAnimator/sa-public-runner`, then rerun `clgb71-live-psd-spine-runtime.yml` on this task branch. Do not send either license value in chat. If the secrets should not be stored in the public runner, the alternative is to bring the licensed iMac online for the native import; it is currently offline.
+
+## Latest public Ubuntu CI confirmation
+
+Latest generic public CI: [run #45138288026](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45138288026), commit `b159875d403d4f36f32b09c3db553af4d9fd8422`. Ubuntu 24.04 completed successfully: Python 21 passed; Node 92 tests, 91 passed / 0 failed / 1 skipped (the live PSD test is exercised by its dedicated workflow); Rust 4 passed; ShellCheck passed.
+
+The connected iMac device check still reports offline. Native Spine Editor 4.3.26 remains blocked by missing `SPINE_LICENSE` and `SPINE_LINUX_URL` public repository secrets. The runtime ZIP is not retained in the artifact and production deployment remains intentionally unperformed.

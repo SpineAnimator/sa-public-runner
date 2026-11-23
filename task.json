@@ -17,7 +17,7 @@
   "status": "runtime-validated-native-editor-blocked-missing-secrets",
   "public_notice": "This branch is public. Its task-specific source modules and tests are intentionally published for isolated CI validation.",
   "public_runner_branch": "task/sa-core-vision-animation-planner-20261123",
-  "public_runner_snapshot_commit": "4eeecb460f7ab8a53a4c954e0ed2f4129a850464",
+  "public_runner_snapshot_commit": "b159875d403d4f36f32b09c3db553af4d9fd8422",
   "subtask_id": "sa-core-vision-animation-planner",
   "required_stages": [
     "python",
@@ -29,17 +29,17 @@
     "native-editor"
   ],
   "source_assets": "No original PSD/customer upload is committed. A later PSD-to-PNG and Spine import stage must retrieve an approved original source separately and verify its full SHA-256.",
-  "public_ci_run_id": 45135382938,
-  "public_ci_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45135382938",
-  "public_ci_commit": "98d6f7db6fa35a2e566a794f6ac5b20c93a749dc",
+  "public_ci_run_id": 45138288026,
+  "public_ci_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45138288026",
+  "public_ci_commit": "b159875d403d4f36f32b09c3db553af4d9fd8422",
   "public_ci_results": {
     "python_tests": "21 passed",
-    "node_tests": "91 passed, 0 failed, 1 skipped (live PSD gate is separately run with manifest)",
-    "rust_tests": "4 passed",
+    "node_tests": "91 passed, 0 failed, 1 skipped (live PSD gate separately executed)",
+    "rust_tests": "4 passed, 0 failed",
     "clippy": "passed",
     "shellcheck": "passed"
   },
-  "next_stage": "SHA-pinned live clgb71.psd retrieval -> 38 original PNG layer extraction -> Spine 4.3 runtime package and contact validation",
+  "next_stage": "Resolve Photoshop PSD composite parity mismatch; provide licensed Spine Editor 4.3.26 runtime on public runner or bring connected iMac online; run native import/reopen/render/round-trip; obtain artistic approval.",
   "native_editor_4_3_26": {
     "status": "blocked_missing_public_runner_secrets",
     "licensed_editor_credentials_available": false,
