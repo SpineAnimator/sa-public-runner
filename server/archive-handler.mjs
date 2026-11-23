@@ -79,7 +79,7 @@ function hostedUrl(raw,hosts){
  return url;
 }
 const assetChunk=16*1024*1024,assetTTL=2592000;
-async function uploadVerifiedCloudflareKV({name,bytes,type,sha256,env}){
+async function uploadVerifiedCloudflareKV({name,bytes,type,sha256,env,fallbackReason}){
  let stage='binding';
  try{
   const ns=env.ASSET_FILES;if(!ns)throw new ArchiveError(503,'ASSET_RELAY_UNAVAILABLE','First-party asset storage is not configured');
@@ -88,7 +88,7 @@ async function uploadVerifiedCloudflareKV({name,bytes,type,sha256,env}){
   for(let i=0;i<chunks;i++){const part=bytes.slice(i*assetChunk,Math.min(bytes.byteLength,(i+1)*assetChunk));await ns.put(prefix+'chunk:'+i,part.buffer,{expirationTtl:assetTTL});}
   stage='manifest-put';
   const expiresAt=new Date(Date.now()+assetTTL*1000).toISOString();
-  const manifest={version:1,id,name,mime:type||'application/octet-stream',bytes:bytes.byteLength,sha256,chunks,createdAt:new Date().toISOString(),expiresAt};
+  const manifest={version:1,id,name,mime:type||'application/octet-stream',bytes:bytes.byteLength,sha256,chunks,createdAt:new Date().toISOString(),expiresAt,fallbackReason:fallbackReason||'CATBOX_UNAVAILABLE'};
   await ns.put(prefix+'manifest',JSON.stringify(manifest),{expirationTtl:assetTTL});
   stage='readback';let verified=false,verificationAttempts=0;
   for(let attempt=0;attempt<5&&!verified;attempt++){
@@ -153,7 +153,7 @@ async function uploadVerifiedCatbox({name,bytes,type,fetchImpl,env}){
  }catch(error){
   const fallbackCodes=new Set(['CATBOX_UPLOAD_NETWORK','CATBOX_UPLOAD_HTTP','CATBOX_RESPONSE','CATBOX_VERIFY_NETWORK','CATBOX_VERIFY']);
   if(!(error instanceof ArchiveError)||!fallbackCodes.has(error.code))throw error;
-  return uploadVerifiedCloudflareKV({name,bytes,type,sha256,env});
+  return uploadVerifiedCloudflareKV({name,bytes,type,sha256,env,fallbackReason:String(error?.code||'CATBOX_UNAVAILABLE').replace(/[^A-Z0-9_]/g,'').slice(0,64)});
  }
 }
 export function createArchiveHandler(env,{fetchImpl=fetch,verifyVisualReview,verifyPoseReview}={}){
