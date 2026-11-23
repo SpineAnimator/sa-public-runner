@@ -64,6 +64,8 @@ To unblock on the public runner, add those two values as repository secrets unde
 
 ## Latest public Ubuntu CI confirmation
 
-Latest generic public CI: [run #45138288026](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45138288026), commit `b159875d403d4f36f32b09c3db553af4d9fd8422`. Ubuntu 24.04 completed successfully: Python 21 passed; Node 92 tests, 91 passed / 0 failed / 1 skipped (the live PSD test is exercised by its dedicated workflow); Rust 4 passed; ShellCheck passed.
+Latest generic public CI: [run #94](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45214842822), on the current branch head `2e92520877e9b061772110a50541568c3d9de550`. Ubuntu 24.04 completed successfully: Python 21 passed; Node 92 tests (91 passed, 0 failed, 1 skipped); Rust 4 passed; Clippy passed; ShellCheck passed. The single Node skip is the live PSD-specific test, which is exercised in the dedicated PSD/runtime workflow.
 
-The connected iMac device check still reports offline. Native Spine Editor 4.3.26 remains blocked by missing `SPINE_LICENSE` and `SPINE_LINUX_URL` public repository secrets. The runtime ZIP is not retained in the artifact and production deployment remains intentionally unperformed.
+Latest live PSD/runtime gate remains [run #5](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45138071384), with report-only [artifact #14799954723](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45138071384/artifacts/14799954723). Its technical source extraction, 38-layer pixel identity, IK/runtime, and contact checks passed. The licensed native Spine Editor steps were skipped because both `SPINE_LICENSE` and `SPINE_LINUX_URL` are absent from the public repository's Actions secrets. The connected iMac is currently offline.
+
+Photoshop composite parity and native Editor import/reopen/render remain unverified. Artistic approval remains false, release readiness remains false, and no production deployment has been performed.

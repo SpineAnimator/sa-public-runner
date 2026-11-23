@@ -17,7 +17,7 @@
   "status": "runtime-validated-native-editor-blocked-missing-secrets",
   "public_notice": "This branch is public. Its task-specific source modules and tests are intentionally published for isolated CI validation.",
   "public_runner_branch": "task/sa-core-vision-animation-planner-20261123",
-  "public_runner_snapshot_commit": "b159875d403d4f36f32b09c3db553af4d9fd8422",
+  "public_runner_snapshot_commit": "2e92520877e9b061772110a50541568c3d9de550",
   "subtask_id": "sa-core-vision-animation-planner",
   "required_stages": [
     "python",
@@ -29,12 +29,12 @@
     "native-editor"
   ],
   "source_assets": "No original PSD/customer upload is committed. A later PSD-to-PNG and Spine import stage must retrieve an approved original source separately and verify its full SHA-256.",
-  "public_ci_run_id": 45138288026,
-  "public_ci_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45138288026",
-  "public_ci_commit": "b159875d403d4f36f32b09c3db553af4d9fd8422",
+  "public_ci_run_id": 45214842822,
+  "public_ci_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45214842822",
+  "public_ci_commit": "2e92520877e9b061772110a50541568c3d9de550",
   "public_ci_results": {
     "python_tests": "21 passed",
-    "node_tests": "91 passed, 0 failed, 1 skipped (live PSD gate separately executed)",
+    "node_tests": "92 total, 91 passed, 0 failed, 1 skipped (live PSD gate separately executed)",
     "rust_tests": "4 passed, 0 failed",
     "clippy": "passed",
     "shellcheck": "passed"
@@ -52,7 +52,9 @@
     "editor_color_parity_outcome": "skipped",
     "private_github_actions_used": false,
     "connected_imac": "offline",
-    "next_action": "Add SPINE_LICENSE and SPINE_LINUX_URL as repository Actions secrets in SpineAnimator/sa-public-runner, then rerun clgb71-live-psd-spine-runtime.yml. Do not paste license values into chat."
+    "next_action": "Add SPINE_LICENSE and SPINE_LINUX_URL as repository Actions secrets in SpineAnimator/sa-public-runner, or bring the licensed iMac online; then rerun clgb71-live-psd-spine-runtime.yml. Do not paste license values into chat.",
+    "latest_gate_run_id": 45138071384,
+    "latest_gate_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45138071384"
   },
   "production_deployment": "not-performed",
   "public_psd_spine_run_id": 45138071384,
@@ -121,7 +123,7 @@
     "photoshop_parity_proven": false,
     "note": "The four SmartObject DropShadow effects are not represented by plain Spine slots; the broad out-of-footprint mismatch is not causally explained yet. Do not treat the source merged preview or the recomposed layers as approved visual truth."
   },
-  "latest_generic_ci_run_id": 45136754779,
-  "latest_generic_ci_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136754779",
-  "latest_generic_ci_commit": "92e71769dbf0a97471bccf351334a71eec83b864"
+  "latest_generic_ci_run_id": 45214842822,
+  "latest_generic_ci_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45214842822",
+  "latest_generic_ci_commit": "2e92520877e9b061772110a50541568c3d9de550"
 }
