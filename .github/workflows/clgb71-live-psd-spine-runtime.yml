@@ -166,14 +166,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -n "${SPINE_LICENSE:-}" && -n "${SPINE_LINUX_URL:-}" ]]; then
+          missing=()
+          [[ -n "${SPINE_LICENSE:-}" ]] || missing+=("SPINE_LICENSE")
+          [[ -n "${SPINE_LINUX_URL:-}" ]] || missing+=("SPINE_LINUX_URL")
+          if [[ ${#missing[@]} -eq 0 ]]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "missing=" >> "$GITHUB_OUTPUT"
             echo "NATIVE_EDITOR_READY=1" >> "$GITHUB_ENV"
             echo "Licensed Editor credentials are present; native 4.3.26 gate will run."
           else
+            missing_csv="$(IFS=,; echo "${missing[*]}")"
             echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "missing=$missing_csv" >> "$GITHUB_OUTPUT"
             echo "NATIVE_EDITOR_READY=0" >> "$GITHUB_ENV"
-            echo "::notice::Native Editor 4.3.26 gate is blocked: public runner needs SPINE_LICENSE and SPINE_LINUX_URL repository secrets. No license values are printed."
+            echo "::notice::Native Editor 4.3.26 gate is blocked; missing repository secrets: $missing_csv. No license values are printed."
           fi
 
       - name: Install licensed Spine Editor 4.3.26 Linux launcher
@@ -231,6 +237,7 @@ jobs:
         if: always()
         env:
           EDITOR_CREDENTIALS_AVAILABLE: ${{ steps.editor_credentials.outputs.available }}
+          EDITOR_MISSING_SECRETS: ${{ steps.editor_credentials.outputs.missing }}
           EDITOR_INSTALL_OUTCOME: ${{ steps.native_editor_install.outcome }}
           EDITOR_IMPORT_OUTCOME: ${{ steps.native_editor_import.outcome }}
           EDITOR_COLOR_OUTCOME: ${{ steps.native_editor_color.outcome }}
@@ -240,6 +247,7 @@ jobs:
           import json, os
           from pathlib import Path
           available=os.environ.get("EDITOR_CREDENTIALS_AVAILABLE") == "true"
+          missing=[x for x in os.environ.get("EDITOR_MISSING_SECRETS","").split(",") if x]
           install=os.environ.get("EDITOR_INSTALL_OUTCOME", "skipped")
           imported=os.environ.get("EDITOR_IMPORT_OUTCOME", "skipped")
           color=os.environ.get("EDITOR_COLOR_OUTCOME", "skipped")
@@ -260,6 +268,7 @@ jobs:
           result={
               "status":status,
               "licensed_editor_credentials_available":available,
+              "missing_secrets":missing,
               "editor_install_outcome":install,
               "editor_import_outcome":imported,
               "editor_color_parity_outcome":color,
