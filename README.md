@@ -55,3 +55,9 @@ The public workflow now contains the licensed Editor import/reopen/round-trip/re
 To unblock without exposing a license in chat: add `SPINE_LICENSE` and `SPINE_LINUX_URL` under **SpineAnimator/sa-public-runner → Settings → Secrets and variables → Actions**, then rerun `clgb71-live-psd-spine-runtime.yml` on this task branch. The workflow will import, reopen and round-trip the ZIP in actual Spine Editor 4.3.26, render both clips, and compare native frames with the PSD references. A failed color-parity audit will remain a release blocker.
 
 No production deployment has been performed.
+
+## Latest native Editor gate result
+
+The public workflow now checks the secret store without printing values. Latest run [#45138071384](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45138071384) confirms that **both** `SPINE_LICENSE` and `SPINE_LINUX_URL` are absent from `SpineAnimator/sa-public-runner`. Therefore the native Editor install/import/render steps were skipped and the report records `blocked_missing_public_runner_secrets`. The runtime/PSD pipeline still passed; this is not a native Editor pass. No private GitHub Actions were used.
+
+To unblock on the public runner, add those two values as repository secrets under **Settings → Secrets and variables → Actions** in `SpineAnimator/sa-public-runner`, then rerun `clgb71-live-psd-spine-runtime.yml` on this task branch. Do not send either license value in chat. If the secrets should not be stored in the public runner, the alternative is to bring the licensed iMac online for the native import; it is currently offline.
