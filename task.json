@@ -14,7 +14,7 @@
     "No licensed Spine Editor binaries or assets",
     "No production deployment"
   ],
-  "status": "runtime-validated-native-editor-and-art-approval-pending",
+  "status": "runtime-validated-native-editor-and-photoshop-parity-pending",
   "public_notice": "This branch is public. Its task-specific source modules and tests are intentionally published for isolated CI validation.",
   "public_runner_branch": "task/sa-core-vision-animation-planner-20261123",
   "public_runner_snapshot_commit": "4eeecb460f7ab8a53a4c954e0ed2f4129a850464",
@@ -34,7 +34,7 @@
   "public_ci_commit": "98d6f7db6fa35a2e566a794f6ac5b20c93a749dc",
   "public_ci_results": {
     "python_tests": "21 passed",
-    "node_tests": "85 passed, 0 failed, 1 skipped pending live PSD manifest",
+    "node_tests": "91 passed, 0 failed, 1 skipped (live PSD gate is separately run with manifest)",
     "rust_tests": "4 passed",
     "clippy": "passed",
     "shellcheck": "passed"
@@ -42,14 +42,14 @@
   "next_stage": "SHA-pinned live clgb71.psd retrieval -> 38 original PNG layer extraction -> Spine 4.3 runtime package and contact validation",
   "native_editor_4_3_26": {
     "status": "not-executed",
-    "reason": "No licensed public runner credentials available; private 3Spine-core Actions were not used. Connected iMac device was offline."
+    "reason": "No licensed public runner environment is available; vladleopold/3Spine-core is private and its Editor workflow needs licensed secrets. Private GitHub Actions were not triggered. Connected iMac device remains offline."
   },
   "production_deployment": "not-performed",
-  "public_psd_spine_run_id": 45136347191,
-  "public_psd_spine_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136347191",
-  "public_psd_spine_commit": "07d795e0dc83baadf6231f836165b88ab0c137a2",
-  "public_psd_spine_artifact_id": 14799483935,
-  "public_psd_spine_artifact_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136347191/artifacts/14799483935",
+  "public_psd_spine_run_id": 45136754842,
+  "public_psd_spine_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136754842",
+  "public_psd_spine_commit": "92e71769dbf0a97471bccf351334a71eec83b864",
+  "public_psd_spine_artifact_id": 14800162126,
+  "public_psd_spine_artifact_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136754842/artifacts/14800162126",
   "runtime_validation": {
     "source_sha256": "7adee866547a3b3cc9838b655cf70865980c5dba00313373cbf903fed776c7b2",
     "retrieval_route": "oidc-verified-kv",
@@ -59,13 +59,19 @@
     "weighted_mesh_layers": 1,
     "ik_constraints": 2,
     "setup_max_bbox_error_px": 0.000030517578125,
+    "max_ik_target_error_px": 0.0000102102356525186,
     "runtime_frames_checked": 122,
     "animations": [
       "shoot_up_01",
       "shoot_up_02"
     ],
-    "sampled_contact_hz": 60,
+    "samples_per_animation": [
+      61,
+      61
+    ],
+    "contact_sample_hz": 60,
     "contact_guard": "PASS",
+    "node_tests": "92 passed, 0 failed, 0 skipped",
     "release_ready": false,
     "artistic_quality_approved": false,
     "photoshop_parity_proven": false,
@@ -78,9 +84,34 @@
     "note": "Generated and validated in ephemeral runner workspace, then deleted; not uploaded."
   },
   "composite_mismatch": {
+    "source_has_unsupported_slot_blends": false,
+    "source_has_unsupported_visual_effects": true,
+    "unsupported_photoshop_compositing_layers": [
+      "card-9",
+      "card-7",
+      "card-5",
+      "card-2"
+    ],
+    "effect": "DropShadow",
+    "effect_parameters": {
+      "angle_deg": 4,
+      "distance_px": 3,
+      "size_px": 2,
+      "opacity_percent": 65,
+      "choke": 0,
+      "noise": 0,
+      "blend_mode": "normal"
+    },
+    "effect_footprint_fraction": 0.067901,
+    "inside_share_of_total_rgb_error": 0.189003,
     "outside_shadow_error_share": 0.810997,
     "outside_opaque_rgb_mae_255": 10.4568,
+    "has_embedded_icc_profile": false,
+    "saved_preview_color_truth_approved": false,
     "photoshop_parity_proven": false,
-    "next_action": "Investigate PSD group/effect compositing and verify native Editor rerender."
-  }
+    "note": "The four SmartObject DropShadow effects are not represented by plain Spine slots; the broad out-of-footprint mismatch is not causally explained yet. Do not treat the source merged preview or the recomposed layers as approved visual truth."
+  },
+  "latest_generic_ci_run_id": 45136754779,
+  "latest_generic_ci_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136754779",
+  "latest_generic_ci_commit": "92e71769dbf0a97471bccf351334a71eec83b864"
 }

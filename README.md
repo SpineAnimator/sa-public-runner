@@ -39,3 +39,11 @@ The follow-on workflow `clgb71-live-psd-spine-runtime.yml` downloads the exact a
 1. Explain and correct the PSD-to-Spine composite mismatch without altering original layer pixels or order.
 2. Obtain an actual licensed Spine Editor 4.3.26 import, reopen, rerender and round-trip verification.
 3. Obtain independent artistic/anatomy approval before treating the ZIP as release-ready.
+
+## Latest source-compositing diagnostic
+
+The latest report-only artifact is [#14800162126](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136754842/artifacts/14800162126), from [public Ubuntu run #45136754842](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136754842).
+
+The PSD profile identifies four SmartObject layers (`card-9`, `card-7`, `card-5`, `card-2`) with Photoshop `DropShadow` styles (4° angle, 3 px distance, 2 px size, 65% opacity). Those effects are not represented by the current Spine slot data. The measured effect footprint covers 6.79% of the canvas, while 81.10% of the saved-preview/recomposition RGB error is outside that modeled footprint; outside opaque RGB MAE is 10.4568/255. The PSD has no embedded ICC profile. The cause of the broad mismatch is not proven, and neither saved preview nor recomposition has been approved as visual truth.
+
+Therefore, the runtime pipeline is technically green, but the asset is **not release-ready**: `artistApproved=false`, `photoshop_parity_proven=false`, and `spine_editor_import_verified=false`. Do not deploy or label the Spine 4.3.26 Editor E2E as passed.
