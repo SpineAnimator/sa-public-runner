@@ -150,7 +150,7 @@ test('Catbox network failure falls back to a verified 30-day first-party KV dire
  assert.equal(response.status,201);
  const receipt=await response.json();
  assert.equal(permanentAttempts,3);
- assert.equal(receipt.provider,'cloudflare-kv');assert.equal(receipt.filename,'character.psd');assert.equal(receipt.mime,'image/vnd.adobe.photoshop');assert.equal(receipt.temporary,false);
+ assert.equal(receipt.provider,'cloudflare-kv');assert.equal(new URL(receipt.url).hostname,'spine-archive.spine-animator-f8692224.workers.dev');assert.equal(receipt.filename,'character.psd');assert.equal(receipt.mime,'image/vnd.adobe.photoshop');assert.equal(receipt.temporary,false);
  assert.equal(receipt.expiresIn,'30d');assert.ok(Date.parse(receipt.expiresAt)>Date.now());
  assert.equal(receipt.verified,true);assert.equal(receipt.verification,'kv-readback-sha256');
  assert.equal(receipt.bytes,source.length);assert.equal(receipt.sha256,sha);
