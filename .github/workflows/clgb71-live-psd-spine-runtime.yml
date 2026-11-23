@@ -181,5 +181,7 @@ jobs:
             .test-output/clgb71-ik/attachment-contact-report.json
             .test-output/clgb71-ik/visual-evidence/fidelity-report.json
             .test-output/clgb71-ik/visual-evidence/psd-effect-footprints.json
+            .test-output/clgb71-ik/visual-evidence/source-psd-compositing-profile.json
+            .test-output/clgb71-ik/visual-evidence/source-psd-color-resources.json
           if-no-files-found: warn
           retention-days: 7
