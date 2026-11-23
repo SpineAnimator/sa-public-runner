@@ -108,7 +108,7 @@ async function uploadVerifiedCloudflareKV({name,bytes,type,sha256,env,fallbackRe
   }catch{throw new ArchiveError(503,'ASSET_PUBLIC_ORIGIN','Asset public origin is not configured correctly');}
   const url=new URL('/api/assets/'+id+'/'+encodeURIComponent(name),base).toString();
   return {provider:'cloudflare-kv',url,filename:name,mime:type||'application/octet-stream',visibility:'public',temporary:false,expiresIn:'30d',expiresAt,
-   bytes:bytes.byteLength,sha256,verified:true,verification:'kv-readback-sha256',uploadAttempts:0,verificationAttempts};
+   bytes:bytes.byteLength,sha256,verified:true,verification:'kv-readback-sha256',uploadAttempts:0,verificationAttempts,fallbackReason:fallbackReason||'CATBOX_UNAVAILABLE'};
  }catch(error){
   if(error instanceof ArchiveError)throw error;
   const errorName=String(error?.name||'Error').replace(/[^A-Za-z0-9_-]/g,'').slice(0,32)||'Error';
