@@ -259,7 +259,7 @@ test("rejects a skin placeholder that collides with default skin attachment",()=
     ]}
   ]},{padding:0});
   assert.equal(result.ok,false);
-  assert.ok(result.diagnostics.some(d=>d.code==="V754_SKIN_DEFAULT_PLACEHOLDER_COLLISION"));
+  assert.ok(result.diagnostics.some(d=>d.code==="V754_SKIN_DEFAULT_PLACEHOLDER_COLLISION"), JSON.stringify(result.diagnostics));
 });
 
 test("hidden group visibility propagates to descendants and slot defaults",()=>{
