@@ -1,4 +1,4 @@
-name: Spine Archive Manifest and PSD Cache health
+name: Spine Archive Manifest, Asset API and PSD Cache health
 on:
   push:
     branches: [main]
@@ -36,7 +36,22 @@ jobs:
                     body.archivePayloads === 'uploaded' &&
                     Number.isInteger(body.archivedWorkerCount) &&
                     body.archivedWorkerCount > 0 &&
-                    body.publicWrite === false;
+                    body.publicWrite === false &&
+                    body.assetUpload === true &&
+                    body.privateArchive === false;
+                }
+              },
+              {
+                name: 'archive asset API readiness',
+                url: 'https://spine-archive.spine-animator-f8692224.workers.dev/api/health',
+                validate(body) {
+                  return body.ok === true &&
+                    body.assetUpload === true &&
+                    body.privateArchive === false &&
+                    body.maxAssetBytes === 64 * 1024 * 1024 &&
+                    body.provider === 'catbox' &&
+                    body.fallbackProvider === 'cloudflare-kv' &&
+                    body.fallbackTtlSeconds === 2592000;
                 }
               },
               {
@@ -65,4 +80,4 @@ jobs:
               }
               core.info(`${check.name}: HTTP ${response.status}; read-only health contract passed.`);
             }
-            core.notice('This gate verifies Worker health and KV manifest/cache readiness only. It does not certify private GitHub archive storage, asset upload/download E2E, Photoshop export, or Spine Editor import.');
+            core.notice('This gate verifies manifest health, asset API readiness and PSD cache health. privateArchive=false is expected while GITHUB_LIBRARY_TOKEN is absent; this does not certify upload/download E2E, Photoshop export, or Spine Editor import.');
