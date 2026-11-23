@@ -20,6 +20,8 @@ on:
       - "tools/export_spine_contact_poses.mjs"
       - "tools/verify_clgb71_fidelity.py"
       - "tools/guard_spine_contacts.py"
+      - "tools/verify_clgb71_editor_linux.py"
+      - "tools/audit_psd_editor_color.py"
       - "tests/real-clgb71-rig.test.cjs"
       - "tests/runtime-contact-evidence.test.mjs"
       - "tests/js-ik-pack.test.mjs"
@@ -156,6 +158,125 @@ jobs:
             --bundle .test-output/clgb71-ik/original-ik-spine-4.3.26.zip \
             --report .test-output/clgb71-ik/attachment-contact-report.json
 
+      - name: Check whether licensed Spine Editor secrets are available in this public runner
+        id: editor_credentials
+        env:
+          SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
+          SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${SPINE_LICENSE:-}" && -n "${SPINE_LINUX_URL:-}" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "NATIVE_EDITOR_READY=1" >> "$GITHUB_ENV"
+            echo "Licensed Editor credentials are present; native 4.3.26 gate will run."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "NATIVE_EDITOR_READY=0" >> "$GITHUB_ENV"
+            echo "::notice::Native Editor 4.3.26 gate is blocked: public runner needs SPINE_LICENSE and SPINE_LINUX_URL repository secrets. No license values are printed."
+          fi
+
+      - name: Install licensed Spine Editor 4.3.26 Linux launcher
+        id: native_editor_install
+        if: steps.editor_credentials.outputs.available == 'true'
+        env:
+          SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb x11-utils x11-xserver-utils libxrandr2 libgl1-mesa-dri libgl1 libxrender1 libxi6 libxext6 libxfixes3 libxcursor1
+          curl --fail --location --silent --show-error --max-time 600 --retry 2 \
+            -A "Mozilla/5.0 (X11; Linux x86_64)" \
+            "$SPINE_LINUX_URL" -o "$RUNNER_TEMP/spine-linux.gz"
+          gzip -t "$RUNNER_TEMP/spine-linux.gz"
+          mkdir -p "$RUNNER_TEMP/spine"
+          gzip -dc "$RUNNER_TEMP/spine-linux.gz" | tar -xf - -C "$RUNNER_TEMP/spine"
+          SPINE_SCRIPT="$RUNNER_TEMP/spine/Spine/Spine.sh"
+          test -x "$SPINE_SCRIPT" || { echo "::error::Spine.sh missing from licensed archive"; exit 1; }
+          echo "SPINE_CLI=$SPINE_SCRIPT" >> "$GITHUB_ENV"
+
+      - name: Import, reopen, round-trip and render with actual Spine Editor 4.3.26
+        id: native_editor_import
+        if: steps.editor_credentials.outputs.available == 'true'
+        env:
+          SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1600x1000x24' \
+            python tools/verify_clgb71_editor_linux.py \
+              --archive .test-output/clgb71-ik/original-ik-spine-4.3.26.zip \
+              --spine "$SPINE_CLI" \
+              --package-report .test-output/clgb71-ik/ik-package-report.json \
+              --output .test-output/clgb71-ik/editor
+
+      - name: Compare licensed Editor rest renders against saved PSD preview and forced layer composite
+        id: native_editor_color
+        if: steps.native_editor_import.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/audit_psd_editor_color.py \
+            --psd-composite .test-output/clgb71-ik/visual-evidence/source-psd-composite.png \
+            --editor-screenshots .test-output/clgb71-ik/editor/screenshots \
+            --layer-composite .test-output/clgb71-ik/visual-evidence/exported-layer-composite-approx.png \
+            --forced-recomposite .test-output/clgb71-ik/visual-evidence/source-psd-recomputed-from-layers.png \
+            --output .test-output/clgb71-ik/editor/psd-editor-color-evidence.json \
+            --fail-on-color-mismatch
+
+      - name: Record native Editor gate status without exposing license details
+        if: always()
+        env:
+          EDITOR_CREDENTIALS_AVAILABLE: ${{ steps.editor_credentials.outputs.available }}
+          EDITOR_INSTALL_OUTCOME: ${{ steps.native_editor_install.outcome }}
+          EDITOR_IMPORT_OUTCOME: ${{ steps.native_editor_import.outcome }}
+          EDITOR_COLOR_OUTCOME: ${{ steps.native_editor_color.outcome }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          available=os.environ.get("EDITOR_CREDENTIALS_AVAILABLE") == "true"
+          install=os.environ.get("EDITOR_INSTALL_OUTCOME", "skipped")
+          imported=os.environ.get("EDITOR_IMPORT_OUTCOME", "skipped")
+          color=os.environ.get("EDITOR_COLOR_OUTCOME", "skipped")
+          report_path=Path(".test-output/clgb71-ik/editor/editor-roundtrip-report.json")
+          color_path=Path(".test-output/clgb71-ik/editor/psd-editor-color-evidence.json")
+          report=json.loads(report_path.read_text()) if report_path.exists() else {}
+          color_report=json.loads(color_path.read_text()) if color_path.exists() else {}
+          if not available:
+              status="blocked_missing_public_runner_secrets"
+          elif install != "success":
+              status="failed_editor_install"
+          elif imported != "success" or report.get("editor_import_verified") is not True:
+              status="failed_native_editor_import"
+          elif color != "success" or color_report.get("status") != "PASS_COLOR_COMPOSITE_PARITY":
+              status="native_editor_import_pass_color_parity_blocked"
+          else:
+              status="native_editor_4_3_26_import_and_color_parity_pass"
+          result={
+              "status":status,
+              "licensed_editor_credentials_available":available,
+              "editor_install_outcome":install,
+              "editor_import_outcome":imported,
+              "editor_color_parity_outcome":color,
+              "editor_import_verified":report.get("editor_import_verified",False),
+              "roundtrip_spine_version":report.get("roundtrip_spine_version"),
+              "slots":report.get("slots"),
+              "ik_constraints":report.get("ik_constraints"),
+              "official_rendered_frames":len(report.get("official_rendered_frames",[])),
+              "photoshop_color_parity_status":color_report.get("status"),
+              "artistic_quality_approved":False,
+              "release_ready":False
+          }
+          Path(".test-output/clgb71-ik/native-editor-status.json").write_text(
+              json.dumps(result,indent=2)+"\n",encoding="utf-8")
+          print("NATIVE_EDITOR_GATE_STATUS",json.dumps(result,sort_keys=True))
+          PY
+
       - name: Remove source PSD, extracted PNGs and generated ZIP from artifact scope
         if: always()
         shell: bash
@@ -165,7 +286,19 @@ jobs:
           rm -f .test-output/clgb71-ik/original-ik-spine-4.3.26.zip
           rm -rf .test-output/clgb71-ik/package/images
           rm -f .test-output/clgb71-ik/original-layers.json
-          echo "Source PSD, original PNGs and generated ZIP removed from runner workspace."
+          if [ -n "${SPINE_CLI:-}" ] && [ -x "$SPINE_CLI" ]; then
+            timeout 180 xvfb-run -a "$SPINE_CLI" -l >/dev/null 2>&1 || true
+          fi
+          rm -rf "$RUNNER_TEMP/spine" "$RUNNER_TEMP/spine-linux.gz"
+          rm -rf .test-output/clgb71-ik/package/images
+          rm -rf .test-output/clgb71-ik/editor/source .test-output/clgb71-ik/editor/roundtrip
+          rm -rf .test-output/clgb71-ik/editor/images .test-output/clgb71-ik/editor/screenshots
+          rm -f .test-output/clgb71-ik/editor/clgb71-editor-4.3.26.spine
+          rm -f .test-output/clgb71-ik/visual-evidence/source-psd-composite.png
+          rm -f .test-output/clgb71-ik/visual-evidence/source-psd-recomputed-from-layers.png
+          rm -f .test-output/clgb71-ik/visual-evidence/exported-layer-composite-approx.png
+          rm -f .test-output/clgb71-ik/visual-evidence/source-vs-alpha-overlay-diff.png
+          echo "Source PSD, original PNGs, ZIP, Editor project and screenshots removed from runner workspace."
 
       - name: Upload non-pixel integrity and diagnostic reports only
         if: always()
@@ -183,5 +316,8 @@ jobs:
             .test-output/clgb71-ik/visual-evidence/psd-effect-footprints.json
             .test-output/clgb71-ik/visual-evidence/source-psd-compositing-profile.json
             .test-output/clgb71-ik/visual-evidence/source-psd-color-resources.json
+            .test-output/clgb71-ik/native-editor-status.json
+            .test-output/clgb71-ik/editor/editor-roundtrip-report.json
+            .test-output/clgb71-ik/editor/psd-editor-color-evidence.json
           if-no-files-found: warn
           retention-days: 7
