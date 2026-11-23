@@ -15,11 +15,20 @@ form.set('file',new Blob([source],{type:'image/vnd.adobe.photoshop'}),'sa-live-s
 const uploadResponse=await fetch(base+'/api/assets/catbox',{method:'POST',headers:{origin,authorization:'Bearer '+session.token},body:form});
 assert.equal(uploadResponse.status,201,'archive must upload and verify the Catbox asset');
 const manifest=await uploadResponse.json();
-assert.equal(manifest.provider,'catbox');
+assert.ok(['catbox','cloudflare-kv'].includes(manifest.provider),'archive must use Catbox or verified first-party KV');
 assert.equal(manifest.visibility,'public');
 assert.equal(manifest.verified,true);
 assert.equal(manifest.bytes,source.length);
 assert.equal(manifest.sha256,createHash('sha256').update(source).digest('hex'));
+if(manifest.provider==='catbox'){
+ const host=new URL(manifest.url).hostname;
+ assert.ok(['files.catbox.moe','litter.catbox.moe'].includes(host),'Catbox URL must use an approved host');
+ assert.equal(manifest.verification,'downloaded-url-sha256');
+}else{
+ assert.equal(new URL(manifest.url).hostname,'spine-archive.spine-animator-f8692224.workers.dev');
+ assert.equal(manifest.expiresIn,'30d');
+ assert.equal(manifest.verification,'kv-readback-sha256');
+}
 const hosted=await fetch(manifest.url,{redirect:'error'});
 assert.equal(hosted.status,200);
 const downloaded=new Uint8Array(await hosted.arrayBuffer());
