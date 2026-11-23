@@ -1,6 +1,12 @@
 name: 2Spine Live MCP Acceptance
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mcp-live-smoke.yml'
+      - 'tests/live-mcp-source.mjs'
+      - 'tests/mcp-streamable-http-live.mjs'
   schedule:
     - cron: '13 */2 * * *'
   workflow_dispatch:
