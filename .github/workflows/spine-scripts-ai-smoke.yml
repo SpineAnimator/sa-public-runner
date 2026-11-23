@@ -22,6 +22,14 @@ jobs:
         with:
           node-version: 22
       - name: Run synthetic AI planner and Spine ZIP motion gate
+        env:
+          SA_SMOKE_ZIP_PATH: ${{ runner.temp }}/synthetic-spine-4.3.26.zip
         run: node tests/spine-scripts-ai-smoke.mjs
+      - name: Upload synthetic Spine ZIP for native editor import
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-spine-4.3.26-ai-smoke
+          path: ${{ runner.temp }}/synthetic-spine-4.3.26.zip
+          retention-days: 7
       - name: State test scope
         run: echo "::notice::Synthetic one-layer test only. It verifies real numeric transform keys and a valid Spine 4.3.26 ZIP; it does not certify original PSD/PSB parsing, Photoshop parity, native editor import, or release readiness."
