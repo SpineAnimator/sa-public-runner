@@ -156,20 +156,23 @@ export function exportV754Spine(document,options={}){
           diagnostics.push({severity:"error",code:"V754_GROUP_COMPOSITING_UNSUPPORTED",path,message:"Group opacity/blend mode requires Photoshop-compatible group compositing"});
         const groupName=parseV754Name(node.name);
         const rawBone=tag(groupName,"bone")??tag(groupName,"folder");
-        const candidate=rawBone===null?groupName.cleanName:String(rawBone===true||rawBone===""?groupName.cleanName:rawBone);
-        const resolved=safeName(candidate||"bone",path,diagnostics);
-        const parent=bones.get(currentBone)||bones.get("root");
-        const bb=visibleSubtreeBounds(node,cfg);
-        if(bones.has(resolved)){
-          const existing=bones.get(resolved);
-          if(existing.parent!==parent.name)diagnostics.push({severity:"error",code:"V754_DUPLICATE_BONE_PARENT",path,message:"Bone name is reused under a different parent: "+resolved});
-          else includeBoneBounds(existing,bb);
-        }else{
-          const created={name:resolved,parent:parent.name,x:0,y:0,children:[],bounds:null};
-          includeBoneBounds(created,bb);
-          bones.set(resolved,created);parent.children.push(resolved);
+        const isSkinContainer=tag(groupName,"skin")!==null&&rawBone===null;
+        if(!isSkinContainer){
+          const candidate=rawBone===null?groupName.cleanName:String(rawBone===true||rawBone===""?groupName.cleanName:rawBone);
+          const resolved=safeName(candidate||"bone",path,diagnostics);
+          const parent=bones.get(currentBone)||bones.get("root");
+          const bb=visibleSubtreeBounds(node,cfg);
+          if(bones.has(resolved)){
+            const existing=bones.get(resolved);
+            if(existing.parent!==parent.name)diagnostics.push({severity:"error",code:"V754_DUPLICATE_BONE_PARENT",path,message:"Bone name is reused under a different parent: "+resolved});
+            else includeBoneBounds(existing,bb);
+          }else{
+            const created={name:resolved,parent:parent.name,x:0,y:0,children:[],bounds:null};
+            includeBoneBounds(created,bb);
+            bones.set(resolved,created);parent.children.push(resolved);
+          }
+          boneName=resolved;
         }
-        boneName=resolved;
       }else{
         const explicitBone=tagOwner(chain,"bone")||tagOwner(chain,"folder");
         if(explicitBone&&explicitBone.node===node){
