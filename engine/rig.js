@@ -98,8 +98,10 @@
     // Prefixes from PSD [name] groups must not obscure actual component names.
     // Weapon-front overlay follows the weapon/hand, not the head.
     if (/eye|mustash|mustach|sombrero|hat|face|head|mouth|голов|лиц|шляп/.test(n)) return {role:'head'};
-    if (/glow.*hand.*right|glow.*right.*hand/.test(n)) return {role:'handEffect',side:'right'};
-    if (/glow.*hand/.test(n)) return {role:'handEffect',side:/left|[-]l$/.test(n)?'left':'left'};
+    if (/glow.*hand|hand.*glow/.test(n)) {
+      const side=/right|прав|[-]r$/.test(n)?'right':/left|лев|[-]l$/.test(n)?'left':null;
+      return {role:'handEffect',side};
+    }
     if (/finger|палец/.test(n)) return {role:'finger',side:/right|[-]r$|прав/.test(n)?'right':'left'};
     if (/arm|hand|кисть|рук/.test(n)) return {role:'arm',side:/right|[-]r$|прав/.test(n)?'right':/left|[-]l$|лев/.test(n)?'left':null};
     if (/pistol|gun|weapon|пистолет|руж/.test(n)) return {role:'gun',side:/right|[-]r$|прав/.test(n)?'right':'left'};
@@ -110,15 +112,14 @@
   }
   function normalize(layers, canvas) {
     if (!Array.isArray(layers)||!layers.length) throw new Error('No source layers supplied');
-    const used=new Set(),usedIds=new Set(),usedSourceIndices=new Set();
+    const usedIds=new Set(),usedSourceIndices=new Set();
     // Draw order is a safe source-index fallback only when every layer has a
     // unique integer order. Synthetic/fractional orders must not alias indices.
     const stableOrder=layers.every(l=>l&&Number.isInteger(l.order)&&l.order>=0)&&
       new Set(layers.map(l=>l.order)).size===layers.length;
     const normalized=layers.map((l,i)=>{
       if (!l||typeof l!=='object'||typeof l.name!=='string'||!l.name.trim()) throw new Error('Every layer needs a name');
-      if (used.has(l.name)) throw new Error('Duplicate layer name: '+l.name+'; retain unique PSD attachment names');
-      used.add(l.name);
+      // Display names are not identities; duplicate PSD names are valid.
       // Preserve the original PSD layer-array index across raster filtering.
       const sourceIndex=Number.isInteger(l.sourceIndex)&&l.sourceIndex>=0?l.sourceIndex:
         stableOrder?l.order:i;
@@ -136,6 +137,16 @@
       return o;
     });
     normalized.sort((a,b)=>a.order-b.order||a.index-b.index);
+    const nameCounts=new Map();
+    for(const layer of normalized)nameCounts.set(layer.name,(nameCounts.get(layer.name)||0)+1);
+    const usedSlotNames=new Set();
+    for(const layer of normalized){
+      let slotName=nameCounts.get(layer.name)>1?layer.name+'__'+layer.id:layer.name;
+      if(usedSlotNames.has(slotName))slotName+='__source_'+layer.index;
+      while(usedSlotNames.has(slotName))slotName+='_';
+      usedSlotNames.add(slotName);
+      layer.slotName=slotName;
+    }
     const bounds={left:Math.min(...normalized.map(l=>l.left)),top:Math.min(...normalized.map(l=>l.top)),
       right:Math.max(...normalized.map(l=>l.left+l.width)),bottom:Math.max(...normalized.map(l=>l.top+l.height))};
     let origin;
@@ -317,7 +328,8 @@
       else if(!explicitLayerParents.has(layer.id||layer.name)&&!layeredOnly&&role==='card')parent=heldCardNames.has(layer.name)?arms.right.handBone:'cards_root';
       else if(!explicitLayerParents.has(layer.id||layer.name)&&!layeredOnly&&(role==='effect'||role==='handEffect'))parent='effects_root';
       if(side&&!arm&&['arm','finger','gun','handEffect'].includes(role))warnings.push('Layer '+layer.name+' is rigid because '+side+' IK was not requested');
-      const name='b_'+layer.name;
+      const slotName=layer.slotName;
+      const name='b_'+slotName;
       // Every picture bone is placed at its own source center in parent space.
       const local=inverse(matrices[parent],layer.center);
       add(name,parent,local.x,local.y);
@@ -360,14 +372,15 @@
       }
       // The slot name is the picture name. A folder prefix or a foreign id
       // makes Spine look for a different file, so the PSD image is not used.
-      attachments[layer.name]={[layer.name]:attachment};
-      const slot={name:layer.name,bone:name};if(layer.visible!==false)slot.attachment=layer.name;
+      attachments[slotName]={[slotName]:attachment};
+      const slot={name:slotName,bone:name};if(layer.visible!==false)slot.attachment=slotName;
       slots.push(slot);
-      layerBindings[layer.name]={bone:name,parentBone:parent,role,side:side||null,center:{...layer.center},
+      layerBindings[slotName]={sourceId:layer.id,sourceName:layer.name,slotName,attachmentName:slotName,
+        bone:name,parentBone:parent,role,side:side||null,center:{...layer.center},
         originalIndex:layer.index,drawOrder:layer.order,width:layer.width,height:layer.height,
-        attachmentType:attachment.type,setupWorldAffine:[...m]};
+        visible:layer.visible!==false,attachmentType:attachment.type,setupWorldAffine:[...m]};
       if(role==='card')cardBones.push(name);
-      if(role==='effect'||role==='handEffect'){glowBones.push(name);glowSlotNames.push(layer.name);}
+      if(role==='effect'||role==='handEffect'){glowBones.push(name);glowSlotNames.push(slotName);}
       if(role==='gun'&&arm&&!arm.gunBone){arm.gunBone=name;arm.gunLocalAxisDegrees=arm.gunAxisWorldDegrees-angle;}
     }
     for(const arm of Object.values(arms))if(!arm.gunBone)arm.gunBone=arm.handBone;
@@ -381,7 +394,11 @@
         boneNames:Object.fromEntries(explicitBoneNames),
         parentByChild:Object.fromEntries(validatedBoneHierarchy.edges.map(edge=>[edge.childId,edge.parentId]))}:null,
       anatomicalBoneBindings:explicitBoneBindings,
-      setupWorldMatrices:matrices,sourceLayerOrder:layers.map(l=>l.name)};
+      setupWorldMatrices:matrices,sourceLayerOrder:layers.map(l=>l.slotName),
+      sourceAssetOrder:layers.map(l=>l.id),
+      sourceLayerBindings:Object.fromEntries(layers.map(l=>[l.id,{sourceId:l.id,sourceIndex:l.index,
+        sourceName:l.name,slotName:l.slotName,attachmentName:l.slotName,visible:l.visible!==false,
+        drawOrder:l.order,width:l.width,height:l.height}]))};
     const invariants=checkSetup(skeleton,context);
     if(!invariants.ok)throw new Error('Source setup preservation failed: '+invariants.errors.join('; '));
     return {skeleton,context,invariants};

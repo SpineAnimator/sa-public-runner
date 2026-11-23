@@ -16,3 +16,8 @@ This branch intentionally publishes only the listed task-specific source modules
 
 ## Execution
 A push to this `task/**` branch starts `SA Ubuntu Linux CI`. The job checks JavaScript syntax and runs Node's test discovery, then uploads the result artifact with seven-day retention.
+
+
+## Live PSD → PNG → Spine runtime gate
+
+The follow-on workflow `clgb71-live-psd-spine-runtime.yml` downloads the exact approved `clgb71.psd` only at job runtime through the SHA-verified Cloudflare KV route, derives the 38-layer manifest, extracts original PNGs into ephemeral workspace storage, builds and validates a Spine 4.3 runtime package, and runs contact/fidelity gates. The original PSD, extracted PNGs, and generated ZIP are never committed or uploaded as artifacts; only non-pixel integrity and diagnostic JSON reports are retained. Native licensed Spine Editor 4.3.26 import remains a separate gate and is not claimed by the runtime test.

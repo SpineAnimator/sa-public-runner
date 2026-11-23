@@ -14,7 +14,7 @@
     "No licensed Spine Editor binaries or assets",
     "No production deployment"
   ],
-  "status": "ready-for-public-ubuntu-ci",
+  "status": "public-ubuntu-ci-passed",
   "public_notice": "This branch is public. Its task-specific source modules and tests are intentionally published for isolated CI validation.",
   "public_runner_branch": "task/sa-core-vision-animation-planner-20261123",
   "public_runner_snapshot_commit": "4eeecb460f7ab8a53a4c954e0ed2f4129a850464",
@@ -28,5 +28,18 @@
     "official-runtime",
     "native-editor"
   ],
-  "source_assets": "No original PSD/customer upload is committed. A later PSD-to-PNG and Spine import stage must retrieve an approved original source separately and verify its full SHA-256."
+  "source_assets": "No original PSD/customer upload is committed. A later PSD-to-PNG and Spine import stage must retrieve an approved original source separately and verify its full SHA-256.",
+  "public_ci_run_id": 45135382938,
+  "public_ci_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45135382938",
+  "public_ci_commit": "98d6f7db6fa35a2e566a794f6ac5b20c93a749dc",
+  "public_ci_results": {
+    "python_tests": "21 passed",
+    "node_tests": "85 passed, 0 failed, 1 skipped pending live PSD manifest",
+    "rust_tests": "4 passed",
+    "clippy": "passed",
+    "shellcheck": "passed"
+  },
+  "next_stage": "SHA-pinned live clgb71.psd retrieval -> 38 original PNG layer extraction -> Spine 4.3 runtime package and contact validation",
+  "native_editor_4_3_26": "not yet executed; public Ubuntu runtime validation is not a substitute for licensed Spine Editor import",
+  "production_deployment": "not performed"
 }
