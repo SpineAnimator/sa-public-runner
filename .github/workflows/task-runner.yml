@@ -103,22 +103,31 @@ jobs:
           fi
 
       - name: Set up stable Rust
-        if: hashFiles('Cargo.toml') != ''
+        if: hashFiles('**/Cargo.toml') != ''
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
       - name: Rust validation
-        if: hashFiles('Cargo.toml') != ''
+        if: hashFiles('**/Cargo.toml') != ''
         shell: bash
         run: |
           set -euo pipefail
           rustc --version | tee results/rust-version.txt
           cargo --version | tee results/cargo-version.txt
-          test -f Cargo.lock || { echo "FAIL: Cargo.lock is required" | tee results/rust-tests.log; exit 1; }
-          cargo fmt --all 2>&1 | tee results/rust-fmt.log
-          cargo clippy --locked --all-targets --all-features -- -D warnings 2>&1 | tee results/rust-clippy.log
-          cargo test --locked --all-targets 2>&1 | tee results/rust-tests.log
+          : > results/rust-fmt.log
+          : > results/rust-clippy.log
+          : > results/rust-tests.log
+          mapfile -t manifests < <(find . -type f -name Cargo.toml -not -path './.git/*' -not -path '*/target/*' -print | sort)
+          test "${#manifests[@]}" -gt 0 || { echo "FAIL: no Cargo.toml files found" | tee -a results/rust-tests.log; exit 1; }
+          for manifest in "${manifests[@]}"; do
+            crate_dir="$(dirname "$manifest")"
+            echo "== Rust crate: $manifest ==" | tee -a results/rust-tests.log
+            test -f "$crate_dir/Cargo.lock" || { echo "FAIL: $crate_dir/Cargo.lock is required" | tee -a results/rust-tests.log; exit 1; }
+            cargo fmt --manifest-path "$manifest" --all -- --check 2>&1 | tee -a results/rust-fmt.log
+            cargo clippy --manifest-path "$manifest" --locked --all-targets --all-features -- -D warnings 2>&1 | tee -a results/rust-clippy.log
+            cargo test --manifest-path "$manifest" --locked --all-targets 2>&1 | tee -a results/rust-tests.log
+          done
 
       - name: ShellCheck (if shell scripts exist)
         shell: bash
