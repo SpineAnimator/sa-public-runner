@@ -47,17 +47,31 @@ jobs:
                 failed=1
               else
                 case "$url" in
-                  */spine-archive*/health)
-                    jq -e '.service == "3spine-archive" and .status == "ready" and .storage == "workers-kv" and .format == "private-ref-manifest" and (.branchSnapshotCount|type == "number" and . > 0) and .archivePayloads == "uploaded" and (.archivedWorkerCount|type == "number" and . > 0) and .publicWrite == false and .assetUpload == true and .privateArchive == false' "probe/${name}.body" >/dev/null
+                  *spine-archive*.workers.dev/api/health)
+                    if jq -e '.ok == true and .assetUpload == true and .privateArchive == false and .maxAssetBytes == 67108864 and .primaryProvider == "catbox" and .providerSelection == "catbox-first-verified-kv-fallback" and .fallbackProvider == "cloudflare-kv" and .fallbackTtlSeconds == 2592000' "probe/${name}.body" >/dev/null; then
+                      echo "JSON health contract: PASS"
+                    else
+                      echo "JSON health contract: FAIL ($url)"
+                      failed=1
+                    fi
                     ;;
-                  */spine-archive*/api/health)
-                    jq -e '.ok == true and .assetUpload == true and .privateArchive == false and .maxAssetBytes == 67108864 and .primaryProvider == "catbox" and .providerSelection == "catbox-first-verified-kv-fallback" and .fallbackProvider == "cloudflare-kv" and .fallbackTtlSeconds == 2592000' "probe/${name}.body" >/dev/null
+                  *spine-archive*.workers.dev/health)
+                    if jq -e '.service == "3spine-archive" and .status == "ready" and .storage == "workers-kv" and .format == "private-ref-manifest" and (.branchSnapshotCount|type == "number" and . > 0) and .archivePayloads == "uploaded" and (.archivedWorkerCount|type == "number" and . > 0) and .publicWrite == false and .assetUpload == true and .privateArchive == false' "probe/${name}.body" >/dev/null; then
+                      echo "JSON health contract: PASS"
+                    else
+                      echo "JSON health contract: FAIL ($url)"
+                      failed=1
+                    fi
                     ;;
-                  */spine-psd-cache*/api/health)
-                    jq -e '.ok == true and .cache == "workers-kv" and .ingest == "github-oidc" and (.maxBytes|type == "number" and . > 0)' "probe/${name}.body" >/dev/null
+                  *spine-psd-cache*.workers.dev/api/health)
+                    if jq -e '.ok == true and .cache == "workers-kv" and .ingest == "github-oidc" and (.maxBytes|type == "number" and . > 0)' "probe/${name}.body" >/dev/null; then
+                      echo "JSON health contract: PASS"
+                    else
+                      echo "JSON health contract: FAIL ($url)"
+                      failed=1
+                    fi
                     ;;
                 esac
-                echo "JSON health contract: PASS"
               fi
             fi
             sed -n '1,12p' "probe/${name}.headers" || true
