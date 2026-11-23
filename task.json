@@ -1,9 +1,19 @@
 {
-  "task_id": "sa-core-bridge",
+  "task_id": "sa-core-vision-animation-planner",
   "source_repository": "SpineAnimator/spine-animator-private",
-  "source_commit": "04c29d617ee3a97b2033a773a2dd7a93f8573a6f",
-  "purpose": "Run SA Node, Python and Rust validation on free GitHub-hosted Ubuntu Linux.",
-  "required_stages": ["python", "node", "rust", "real-psd", "spine-zip", "official-runtime", "native-editor"],
-  "source_assets": "The real PSD is retrieved at runtime from its approved source URL and verified by full SHA-256; no PSD bytes are committed to this public repository.",
-  "status": "bridge-bootstrap-only"
+  "source_commit": "2f19c316eb7a540c4da38ce858853772d16673ce",
+  "purpose": "Run the current semantic contour, reconstruction QA, layer budget, Scene IR, animation planner, vision adapter, SA agent and job-handoff Node test suites on free GitHub-hosted Ubuntu 24.04.",
+  "validation_scope": [
+    "10 Node test files",
+    "22 task source modules",
+    "Node.js 22 syntax and test execution"
+  ],
+  "exclusions": [
+    "No original PSD or customer uploads",
+    "No credentials, access tokens or secrets",
+    "No licensed Spine Editor binaries or assets",
+    "No production deployment"
+  ],
+  "status": "queued-for-public-ubuntu-validation",
+  "public_notice": "This branch is public. Its task-specific source modules and tests are intentionally published for isolated CI validation."
 }

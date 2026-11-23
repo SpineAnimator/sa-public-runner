@@ -1,32 +1,18 @@
-# SA Public Runner
+# SA Core Vision / Animation Planner — public CI task
 
-Free, ephemeral Ubuntu Linux CI workspace for **non-sensitive** task-specific validation.
+This branch is a task-scoped, publicly readable validation snapshot from `SpineAnimator/spine-animator-private` at commit `2f19c316eb7a540c4da38ce858853772d16673ce`.
 
-## Operating model
+## Scope
+- Semantic contour rendering and reconstruction QA
+- Semantic anatomy plan and layer-budget optimization
+- Scene IR, vision adapter and animation planner
+- SA tool registry / orchestration adapter
+- Job handoff HTTP contract
 
-- Keep `main` limited to this runner contract.
-- Put one task in a short-lived `task/<task-id>` branch.
-- Push only tests and fixtures explicitly safe to publish.
-- A push to `task/**` starts the Ubuntu 24.04 GitHub-hosted CI workflow.
-- Collect the `sa-ubuntu-linux-ci-results` artifact, then remove the task branch when possible.
+The Ubuntu 24.04 task workflow validates these modules with Node.js 22. This is isolated component validation, not proof of full private-repository integration or artistic correctness.
 
-## Ubuntu CI profile
+## Public-data boundary
+This branch intentionally publishes only the listed task-specific source modules and tests for CI. It contains no original PSD/customer uploads, credentials, tokens, private keys, licensed Spine Editor binaries/assets, or production build outputs. The source and tests in this branch are publicly readable.
 
-- GitHub-hosted `ubuntu-24.04` runner (Linux x86_64 image).
-- Python 3.12: bytecode compilation and unittest discovery.
-- Node.js 22: syntax validation and built-in test runner.
-- Rust stable: rustfmt, Clippy with warnings denied, and locked Cargo tests.
-- ShellCheck is installed only when shell scripts are present.
-- Runner diagnostics and test logs are retained in a 7-day artifact.
-- Toolchains are skipped when their source files are absent; Rust requires a committed `Cargo.lock`.
-
-## Safety boundary
-
-Never push private SA source code, credentials, access tokens, private PSDs, customer data,
-licensed Spine Editor binaries/assets, or confidential build outputs here. This is a public
-repository. Workflows receive no repository secrets, use read-only repository permissions,
-and checkout without persisting credentials. Treat task-branch contents as untrusted executable code.
-
-This runner validates public fixtures and isolated components. It does not by itself prove
-private-repository integration, PSD extraction fidelity, Spine ZIP correctness, or licensed
-Spine Editor import/runtime behavior.
+## Execution
+A push to this `task/**` branch starts `SA Ubuntu Linux CI`. The job checks JavaScript syntax and runs Node's test discovery, then uploads the result artifact with seven-day retention.
