@@ -24,6 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p probe
+          failures=0
           urls=(
             https://example.com/
             https://httpbin.org/status/200
@@ -35,25 +36,53 @@ jobs:
           for url in "${urls[@]}"; do
             name="$(printf '%s' "$url" | sed -E 's#https://##; s#[^A-Za-z0-9]+#_#g; s#_$##')"
             echo "=== $url ==="
-            status="$(curl --silent --show-error --location --max-time 20 \
+            curl_rc=0
+            status="$(curl --silent --show-error --location --max-time 20 --max-filesize 1048576 \
               --output "probe/${name}.body" --dump-header "probe/${name}.headers" \
-              --write-out '%{http_code}' "$url")"
-            printf '%s\n' "$status" | tee "probe/${name}.status"
-            test "$status" = "200"
-            sed -n '1,12p' "probe/${name}.headers"
-            head -c 600 "probe/${name}.body"
+              --write-out '%{http_code}' "$url")" || curl_rc=$?
+            printf '%s\n' "${status:-000}" | tee "probe/${name}.status"
+            sed -n '1,12p' "probe/${name}.headers" 2>/dev/null || true
+            head -c 600 "probe/${name}.body" 2>/dev/null || true
             printf '\n'
+            if [[ "$curl_rc" -ne 0 ]]; then
+              echo "${url}: curl failed (exit ${curl_rc})" | tee -a probe/failures.txt
+              failures=1
+            elif [[ "$url" == "https://api.github.com/" ]]; then
+              # GitHub may rate-limit anonymous requests with HTTP 403. That still
+              # proves TLS/API reachability; require a GitHub request ID header.
+              if [[ "$status" != "200" && "$status" != "403" ]] || ! grep -qi '^x-github-request-id:' "probe/${name}.headers"; then
+                echo "${url}: unexpected API response (HTTP ${status})" | tee -a probe/failures.txt
+                failures=1
+              fi
+            elif [[ "$status" != "200" ]]; then
+              echo "${url}: expected HTTP 200, got ${status}" | tee -a probe/failures.txt
+              failures=1
+            fi
           done
           {
             echo "runner=$(uname -a)"
             echo "date_utc=$(date -u +%FT%TZ)"
             echo "curl=$(curl --version | head -n1)"
-            for f in probe/*.status; do printf '%s=%s\n' "$(basename "$f" .status)" "$(cat "$f")"; done
+            for f in probe/*.status; do
+              printf '%s=%s\n' "$(basename "$f" .status)" "$(cat "$f")"
+            done
+            echo "failures=${failures}"
           } | tee probe/summary.txt
+          echo "$failures" > probe/failure-exit-code.txt
       - name: Upload raw HTTP evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: external-http-evidence
           path: probe/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
+      - name: Fail if any endpoint check failed
+        if: always()
+        shell: bash
+        run: |
+          if [[ ! -f probe/failure-exit-code.txt ]]; then
+            echo "Probe did not produce a result file"
+            exit 1
+          fi
+          test "$(cat probe/failure-exit-code.txt)" = "0"
