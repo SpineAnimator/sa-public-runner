@@ -41,9 +41,24 @@ jobs:
               --output "probe/${name}.body" --dump-header "probe/${name}.headers" \
               --write-out '%{http_code}' "$url")" || status="000"
             printf '%s\n' "$status" | tee "probe/${name}.status"
-            if [[ "$url" == *".workers.dev/"* ]] && [[ "$status" != "200" ]]; then
-              echo "REQUIRED HEALTH CHECK FAILED: $url returned $status"
-              failed=1
+            if [[ "$url" == *".workers.dev/"* ]]; then
+              if [[ "$status" != "200" ]]; then
+                echo "REQUIRED HEALTH CHECK FAILED: $url returned $status"
+                failed=1
+              else
+                case "$url" in
+                  */spine-archive*/health)
+                    jq -e '.service == "3spine-archive" and .status == "ready" and .storage == "workers-kv" and .format == "private-ref-manifest" and (.branchSnapshotCount|type == "number" and . > 0) and .archivePayloads == "uploaded" and (.archivedWorkerCount|type == "number" and . > 0) and .publicWrite == false and .assetUpload == true and .privateArchive == false' "probe/${name}.body" >/dev/null
+                    ;;
+                  */spine-archive*/api/health)
+                    jq -e '.ok == true and .assetUpload == true and .privateArchive == false and .maxAssetBytes == 67108864 and .primaryProvider == "catbox" and .providerSelection == "catbox-first-verified-kv-fallback" and .fallbackProvider == "cloudflare-kv" and .fallbackTtlSeconds == 2592000' "probe/${name}.body" >/dev/null
+                    ;;
+                  */spine-psd-cache*/api/health)
+                    jq -e '.ok == true and .cache == "workers-kv" and .ingest == "github-oidc" and (.maxBytes|type == "number" and . > 0)' "probe/${name}.body" >/dev/null
+                    ;;
+                esac
+                echo "JSON health contract: PASS"
+              fi
             fi
             sed -n '1,12p' "probe/${name}.headers" || true
             head -c 600 "probe/${name}.body" || true
@@ -55,6 +70,7 @@ jobs:
             echo "curl=$(curl --version | head -n1)"
             echo "required_health_failure=$failed"
             for f in probe/*.status; do printf '%s=%s\n' "$(basename "$f" .status)" "$(cat "$f")"; done
+            echo "private_archive_status=NOT_READY (health contract reports privateArchive=false)"
           } | tee probe/summary.txt
           exit "$failed"
       - name: Upload raw HTTP evidence
