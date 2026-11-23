@@ -14,7 +14,7 @@
     "No licensed Spine Editor binaries or assets",
     "No production deployment"
   ],
-  "status": "public-ubuntu-ci-passed",
+  "status": "runtime-validated-native-editor-and-art-approval-pending",
   "public_notice": "This branch is public. Its task-specific source modules and tests are intentionally published for isolated CI validation.",
   "public_runner_branch": "task/sa-core-vision-animation-planner-20261123",
   "public_runner_snapshot_commit": "4eeecb460f7ab8a53a4c954e0ed2f4129a850464",
@@ -40,6 +40,47 @@
     "shellcheck": "passed"
   },
   "next_stage": "SHA-pinned live clgb71.psd retrieval -> 38 original PNG layer extraction -> Spine 4.3 runtime package and contact validation",
-  "native_editor_4_3_26": "not yet executed; public Ubuntu runtime validation is not a substitute for licensed Spine Editor import",
-  "production_deployment": "not performed"
+  "native_editor_4_3_26": {
+    "status": "not-executed",
+    "reason": "No licensed public runner credentials available; private 3Spine-core Actions were not used. Connected iMac device was offline."
+  },
+  "production_deployment": "not-performed",
+  "public_psd_spine_run_id": 45136347191,
+  "public_psd_spine_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136347191",
+  "public_psd_spine_commit": "07d795e0dc83baadf6231f836165b88ab0c137a2",
+  "public_psd_spine_artifact_id": 14799483935,
+  "public_psd_spine_artifact_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136347191/artifacts/14799483935",
+  "runtime_validation": {
+    "source_sha256": "7adee866547a3b3cc9838b655cf70865980c5dba00313373cbf903fed776c7b2",
+    "retrieval_route": "oidc-verified-kv",
+    "original_layers": 38,
+    "pixel_identical_png_layers": 38,
+    "draw_order_identical": true,
+    "weighted_mesh_layers": 1,
+    "ik_constraints": 2,
+    "setup_max_bbox_error_px": 0.000030517578125,
+    "runtime_frames_checked": 122,
+    "animations": [
+      "shoot_up_01",
+      "shoot_up_02"
+    ],
+    "sampled_contact_hz": 60,
+    "contact_guard": "PASS",
+    "release_ready": false,
+    "artistic_quality_approved": false,
+    "photoshop_parity_proven": false,
+    "native_editor_import_verified": false
+  },
+  "output_zip": {
+    "sha256": "8d4ff1c8cba8914336c76cfdd96730f84921cd526e9a4bf454c3605f790328c2",
+    "size_bytes": 2067961,
+    "retained": false,
+    "note": "Generated and validated in ephemeral runner workspace, then deleted; not uploaded."
+  },
+  "composite_mismatch": {
+    "outside_shadow_error_share": 0.810997,
+    "outside_opaque_rgb_mae_255": 10.4568,
+    "photoshop_parity_proven": false,
+    "next_action": "Investigate PSD group/effect compositing and verify native Editor rerender."
+  }
 }
