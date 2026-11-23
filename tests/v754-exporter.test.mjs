@@ -31,6 +31,20 @@ test("preserves duplicate PSD layer names using stable internal slots and raster
   assert.ok(result.diagnostics.some(item=>item.code==="V754_DUPLICATE_SOURCE_NAME_DISAMBIGUATED"));
 });
 
+test("fails closed instead of renaming duplicate source layers without stable identity",()=>{
+  const input={width:40,height:30,children:[
+    {name:"orn",kind:"pixel",visible:true,bounds:{left:2,top:4,right:12,bottom:14},
+     imagePath:"first.png",raster:{width:10,height:10,alpha_bounds:[0,0,10,10]}},
+    {name:"orn",kind:"pixel",visible:true,bounds:{left:18,top:4,right:28,bottom:14},
+     imagePath:"second.png",raster:{width:10,height:10,alpha_bounds:[0,0,10,10]}}
+  ]};
+  const originalNames=input.children.map(node=>node.name);
+  const result=exportV754Spine(input,{padding:0});
+  assert.equal(result.ok,false,JSON.stringify(result.diagnostics));
+  assert.ok(result.diagnostics.some(d=>d.code==="V754_DUPLICATE_LAYER_ID_REQUIRED"), JSON.stringify(result.diagnostics));
+  assert.deepEqual(input.children.map(node=>node.name),originalNames);
+});
+
 test("keeps explicit shared-slot duplicate attachment conflicts fail-closed",()=>{
   const layer=(id,index,imagePath,left)=>({
     name:"orn [slot:decor]",kind:"pixel",visible:true,bounds:{left,top:4,right:left+10,bottom:14},
