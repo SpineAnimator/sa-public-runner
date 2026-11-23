@@ -231,9 +231,9 @@ export function exportV754Spine(document,options={}){
     const usePathTag=Boolean(pathOwner);
     const pathValue=usePathTag?String(ownerValue(pathOwner)):attachmentName;
     let imagePath;
-    if(!usePathTag)imagePath=attachmentName.replace(/^\\/+/, "");
+    if(!usePathTag)imagePath=attachmentName.replace(/^\/+/, "");
     else if(pathValue.startsWith("/"))imagePath=pathValue.slice(1);
-    else imagePath=[...folders,pathValue].filter(Boolean).join("/").replace(/^\\/+/, "");
+    else imagePath=[...folders,pathValue].filter(Boolean).join("/").replace(/^\/+/, "");
     const placeholderName=skin==="default"?attachmentName:attachmentName.slice(skin.length+1);
     const existingSlot=slots.get(slotName);
     const existingBucket=skinMap.get(skin)?.get(slotName);
