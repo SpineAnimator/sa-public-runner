@@ -1,0 +1,49 @@
+name: Spine Archive Worker health
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/archive-worker-health.yml'
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: spine-archive-health
+  cancel-in-progress: true
+jobs:
+  health:
+    name: Verify production archive Worker health
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check live Worker readiness without uploading data
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = 'https://spine-archive.vladyslavchaplygin.workers.dev/api/health';
+            const response = await fetch(url, {
+              headers: { accept: 'application/json', 'cache-control': 'no-cache' },
+              signal: AbortSignal.timeout(15000)
+            });
+            if (!response.ok) {
+              throw new Error(`Archive Worker health returned HTTP ${response.status}`);
+            }
+            const body = await response.json();
+            const expected = {
+              ok: true,
+              assetUpload: true,
+              privateArchive: true,
+              provider: 'catbox',
+              fallbackProvider: 'cloudflare-kv',
+              fallbackTtlSeconds: 2592000
+            };
+            for (const [key, value] of Object.entries(expected)) {
+              if (body[key] !== value) {
+                throw new Error(`Archive Worker health mismatch for ${key}`);
+              }
+            }
+            core.info('Production archive Worker is ready.');
+            core.info('Catbox primary and 30-day Cloudflare KV fallback are enabled.');
+            core.info(`HTTP ${response.status}; fallback TTL ${body.fallbackTtlSeconds}s.`);
