@@ -253,12 +253,14 @@ test("rejects Photoshop blend modes without a Spine-equivalent compositor",()=>{
 
 test("rejects a skin placeholder that collides with default skin attachment",()=>{
   const result=exportV754Spine({width:20,height:20,children:[
-    {name:"DefaultPart",visible:true,bounds:{left:1,top:1,right:5,bottom:5},imagePath:"default.png"},
-    {name:"Variant [skin:summer]",isGroup:true,visible:true,children:[
-      {name:"DefaultPart",visible:true,bounds:{left:1,top:1,right:5,bottom:5},imagePath:"variant.png"}
+    {name:"Character [bone]",isGroup:true,visible:true,children:[
+      {name:"DefaultPart",kind:"pixel",visible:true,bounds:{left:1,top:1,right:5,bottom:5},
+       imagePath:"default.png",layerId:"a".repeat(24),sourceIndexPath:[0],sourcePath:"Character/DefaultPart"},
+      {name:"DefaultPart [skin:summer]",kind:"pixel",visible:true,bounds:{left:1,top:1,right:5,bottom:5},
+       imagePath:"variant.png",layerId:"b".repeat(24),sourceIndexPath:[1],sourcePath:"Character/DefaultPart"}
     ]}
   ]},{padding:0});
-  assert.equal(result.ok,false);
+  assert.equal(result.ok,false,JSON.stringify(result.diagnostics));
   assert.ok(result.diagnostics.some(d=>d.code==="V754_SKIN_DEFAULT_PLACEHOLDER_COLLISION"), JSON.stringify(result.diagnostics));
 });
 
