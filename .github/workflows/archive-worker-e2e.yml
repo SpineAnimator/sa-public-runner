@@ -1,4 +1,4 @@
-name: Archive Worker synthetic upload/download SHA gate
+name: Archive Worker synthetic upload/download SHA gate (provider diagnostics)
 on:
   push:
     branches: [main]
