@@ -32,6 +32,7 @@ jobs:
             https://spine-archive.spine-animator-f8692224.workers.dev/api/health
             https://spine-psd-cache.spine-animator-f8692224.workers.dev/api/health
           )
+          echo "probe_target_count=${#urls[@]}"
           for url in "${urls[@]}"; do
             name="$(printf '%s' "$url" | sed -E 's#https://##; s#[^A-Za-z0-9]+#_#g; s#_$##')"
             echo "=== $url ==="
