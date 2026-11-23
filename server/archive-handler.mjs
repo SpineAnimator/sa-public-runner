@@ -176,7 +176,7 @@ export function createArchiveHandler(env,{fetchImpl=fetch,verifyVisualReview,ver
    if(request.method==='POST'){
     const ip=request.headers.get('cf-connecting-ip')||'unknown',stamp=Date.now(),old=rates.get(ip),v=old&&stamp-old.since<60000?old:{since:stamp,count:0};v.count++;if(rates.size>10000)rates.clear();rates.set(ip,v);if(v.count>20)throw new ArchiveError(429,'RATE_LIMIT','Generation request limit reached');
    }
-   if(path==='/api/health'&&request.method==='GET')return send(200,{ok:true,assetUpload:uploadReady,privateArchive:ready,maxAssetBytes:assetLimit,provider:'catbox',fallbackProvider:'cloudflare-kv',fallbackTtlSeconds:2592000});
+   if(path==='/api/health'&&request.method==='GET')return send(200,{ok:true,assetUpload:uploadReady,privateArchive:ready,maxAssetBytes:assetLimit,primaryProvider:'catbox',providerSelection:'catbox-first-verified-kv-fallback',fallbackProvider:'cloudflare-kv',fallbackTtlSeconds:2592000});
    if(path==='/api/session'&&request.method==='POST'){
     let recoveryKey=null;
     if(/^application\/json(?:;|$)/i.test(request.headers.get('content-type')||'')){
