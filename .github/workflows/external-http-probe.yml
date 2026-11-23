@@ -19,12 +19,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Probe external HTTPS endpoints
+      - name: Probe external HTTPS and production health endpoints
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p probe
-          for url in https://example.com/ https://httpbin.org/status/200 https://api.github.com/; do
+          urls=(
+            https://example.com/
+            https://httpbin.org/status/200
+            https://api.github.com/
+            https://spine-archive.spine-animator-f8692224.workers.dev/health
+            https://spine-archive.spine-animator-f8692224.workers.dev/api/health
+            https://spine-psd-cache.spine-animator-f8692224.workers.dev/api/health
+          )
+          for url in "${urls[@]}"; do
             name="$(printf '%s' "$url" | sed -E 's#https://##; s#[^A-Za-z0-9]+#_#g; s#_$##')"
             echo "=== $url ==="
             status="$(curl --silent --show-error --location --max-time 20 \
@@ -33,7 +41,7 @@ jobs:
             printf '%s\n' "$status" | tee "probe/${name}.status"
             test "$status" = "200"
             sed -n '1,12p' "probe/${name}.headers"
-            head -c 240 "probe/${name}.body"
+            head -c 600 "probe/${name}.body"
             printf '\n'
           done
           {
