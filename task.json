@@ -14,7 +14,7 @@
     "No licensed Spine Editor binaries or assets",
     "No production deployment"
   ],
-  "status": "runtime-validated-native-editor-and-photoshop-parity-pending",
+  "status": "runtime-validated-native-editor-gate-prepared-but-blocked",
   "public_notice": "This branch is public. Its task-specific source modules and tests are intentionally published for isolated CI validation.",
   "public_runner_branch": "task/sa-core-vision-animation-planner-20261123",
   "public_runner_snapshot_commit": "4eeecb460f7ab8a53a4c954e0ed2f4129a850464",
@@ -41,15 +41,25 @@
   },
   "next_stage": "SHA-pinned live clgb71.psd retrieval -> 38 original PNG layer extraction -> Spine 4.3 runtime package and contact validation",
   "native_editor_4_3_26": {
-    "status": "not-executed",
-    "reason": "No licensed public runner environment is available; vladleopold/3Spine-core is private and its Editor workflow needs licensed secrets. Private GitHub Actions were not triggered. Connected iMac device remains offline."
+    "status": "blocked_missing_public_runner_secrets",
+    "licensed_editor_credentials_available": false,
+    "missing_secrets": [
+      "SPINE_LICENSE",
+      "SPINE_LINUX_URL"
+    ],
+    "editor_install_outcome": "skipped",
+    "editor_import_outcome": "skipped",
+    "editor_color_parity_outcome": "skipped",
+    "private_github_actions_used": false,
+    "connected_imac": "offline",
+    "next_action": "Add SPINE_LICENSE and SPINE_LINUX_URL as repository Actions secrets in SpineAnimator/sa-public-runner; do not paste license values into chat. Then rerun clgb71-live-psd-spine-runtime.yml."
   },
   "production_deployment": "not-performed",
-  "public_psd_spine_run_id": 45136754842,
-  "public_psd_spine_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136754842",
-  "public_psd_spine_commit": "92e71769dbf0a97471bccf351334a71eec83b864",
-  "public_psd_spine_artifact_id": 14800162126,
-  "public_psd_spine_artifact_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45136754842/artifacts/14800162126",
+  "public_psd_spine_run_id": 45137717984,
+  "public_psd_spine_run_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45137717984",
+  "public_psd_spine_commit": "8ccb5f03137cb386682c92a5fa8a2fd6099e1936",
+  "public_psd_spine_artifact_id": 14799844376,
+  "public_psd_spine_artifact_url": "https://github.com/SpineAnimator/sa-public-runner/actions/runs/45137717984/artifacts/14799844376",
   "runtime_validation": {
     "source_sha256": "7adee866547a3b3cc9838b655cf70865980c5dba00313373cbf903fed776c7b2",
     "retrieval_route": "oidc-verified-kv",

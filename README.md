@@ -47,3 +47,11 @@ The latest report-only artifact is [#14800162126](https://github.com/SpineAnimat
 The PSD profile identifies four SmartObject layers (`card-9`, `card-7`, `card-5`, `card-2`) with Photoshop `DropShadow` styles (4° angle, 3 px distance, 2 px size, 65% opacity). Those effects are not represented by the current Spine slot data. The measured effect footprint covers 6.79% of the canvas, while 81.10% of the saved-preview/recomposition RGB error is outside that modeled footprint; outside opaque RGB MAE is 10.4568/255. The PSD has no embedded ICC profile. The cause of the broad mismatch is not proven, and neither saved preview nor recomposition has been approved as visual truth.
 
 Therefore, the runtime pipeline is technically green, but the asset is **not release-ready**: `artistApproved=false`, `photoshop_parity_proven=false`, and `spine_editor_import_verified=false`. Do not deploy or label the Spine 4.3.26 Editor E2E as passed.
+
+## Native Spine Editor 4.3.26 gate — prepared, currently blocked
+
+The public workflow now contains the licensed Editor import/reopen/round-trip/render path and the PSD-vs-Editor color audit. It checks the public runner's secret store without printing values. Latest run [#45137717984](https://github.com/SpineAnimator/sa-public-runner/actions/runs/45137717984) recorded `blocked_missing_public_runner_secrets`: `SPINE_LICENSE` and `SPINE_LINUX_URL` are not available to this public repository, so the licensed Editor steps were skipped. No private GitHub Actions were triggered. The connected iMac remains offline.
+
+To unblock without exposing a license in chat: add `SPINE_LICENSE` and `SPINE_LINUX_URL` under **SpineAnimator/sa-public-runner → Settings → Secrets and variables → Actions**, then rerun `clgb71-live-psd-spine-runtime.yml` on this task branch. The workflow will import, reopen and round-trip the ZIP in actual Spine Editor 4.3.26, render both clips, and compare native frames with the PSD references. A failed color-parity audit will remain a release blocker.
+
+No production deployment has been performed.
