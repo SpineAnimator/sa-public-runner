@@ -1,0 +1,27 @@
+name: Spine Scripts synthetic AI-to-Spine motion gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spine-scripts-ai-smoke.yml'
+      - 'tests/spine-scripts-ai-smoke.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: spine-scripts-ai-smoke
+  cancel-in-progress: true
+jobs:
+  ai-to-spine:
+    name: Synthetic sprite → AI plan → Spine 4.3.26 ZIP
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run synthetic AI planner and Spine ZIP motion gate
+        run: node tests/spine-scripts-ai-smoke.mjs
+      - name: State test scope
+        run: echo "::notice::Synthetic one-layer test only. It verifies real numeric transform keys and a valid Spine 4.3.26 ZIP; it does not certify original PSD/PSB parsing, Photoshop parity, native editor import, or release readiness."
