@@ -12,6 +12,7 @@ on:
       - "engine/bone-structure.js"
       - "engine/motion.js"
       - "engine/intent.js"
+      - "engine/etalons.js"
       - "tools/verify_clgb71_rig.mjs"
       - "tools/clgb71-art-finish.cjs"
       - "tools/package_clgb71_ik.mjs"
