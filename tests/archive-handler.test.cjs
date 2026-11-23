@@ -81,7 +81,7 @@ test('standalone upload worker reports readiness without exposing signing materi
  const {handler}=await setup(undefined,{SESSION_SECRET:'c'.repeat(64)});
  const response=await handler(new Request('https://archive.example/api/health',{headers:{origin}}));
  assert.equal(response.status,200);
- assert.deepEqual(await response.json(),{ok:true,assetUpload:true,privateArchive:false,maxAssetBytes:64*1024*1024,provider:'catbox',fallbackProvider:'cloudflare-kv',fallbackTtlSeconds:2592000});
+ assert.deepEqual(await response.json(),{ok:true,assetUpload:true,privateArchive:false,maxAssetBytes:64*1024*1024,primaryProvider:'catbox',providerSelection:'catbox-first-verified-kv-fallback',fallbackProvider:'cloudflare-kv',fallbackTtlSeconds:2592000});
 });
 
 
