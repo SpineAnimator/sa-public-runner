@@ -1,6 +1,6 @@
 (function(root){
 'use strict';
-const hosts=new Set(['files.catbox.moe','litter.catbox.moe','spine-archive.vladyslavchaplygin.workers.dev']);
+const hosts=new Set(['files.catbox.moe','litter.catbox.moe','spine-archive.spine-animator-f8692224.workers.dev']);
 const extensions=new Set(['.psd','.psb','.png','.jpg','.jpeg','.webp','.gif','.zip','.json','.atlas','.skel','.spine','.txt','.md','.yaml','.yml','.toml','.csv','.xml','.js','.mjs','.ts','.py','.html','.css','.pdf','.wasm','.bin','.bytes','.mp4','.webm','.mov','.glb','.gltf','.obj','.fbx','.blend','.jsonl','.json5','.ini','.cfg','.sh','.ps1','.c','.h','.cpp','.rs','.go','.java','.kt','.swift','.lua','.gd','.tscn','.tres']);
 function fail(message){throw new Error('SA asset upload: '+message);}
 function createCatboxAssetUploader({archiveApiUrl,fetchImpl}={}){
@@ -28,7 +28,7 @@ function createCatboxAssetUploader({archiveApiUrl,fetchImpl}={}){
    fail('archive returned a URL outside the public asset allowlist');
   const hasExpiry=typeof result.expiresAt==='string'&&Number.isFinite(Date.parse(result.expiresAt))&&Date.parse(result.expiresAt)>Date.now();
   const isPermanent=result.provider==='catbox'&&url.hostname==='files.catbox.moe'&&result.temporary!==true;
-  const isCloudflare=result.provider==='cloudflare-kv'&&url.hostname==='spine-archive.vladyslavchaplygin.workers.dev'&&
+  const isCloudflare=result.provider==='cloudflare-kv'&&url.hostname==='spine-archive.spine-animator-f8692224.workers.dev'&&
     result.temporary===false&&result.expiresIn==='30d'&&hasExpiry;
   const isTemporary=result.provider==='litterbox'&&url.hostname==='litter.catbox.moe'&&result.temporary===true&&
     result.expiresIn==='72h'&&hasExpiry;
