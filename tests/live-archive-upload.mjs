@@ -33,4 +33,4 @@ const hosted=await fetch(manifest.url,{redirect:'error'});
 assert.equal(hosted.status,200);
 const downloaded=new Uint8Array(await hosted.arrayBuffer());
 assert.deepEqual(downloaded,source);
-console.log(JSON.stringify({ok:true,provider:manifest.provider,bytes:manifest.bytes,sha256:manifest.sha256,verification:manifest.verification}));
+console.log(JSON.stringify({ok:true,provider:manifest.provider,fallbackReason:manifest.fallbackReason||null,id:manifest.id||null,expiresAt:manifest.expiresAt||null,bytes:manifest.bytes,sha256:manifest.sha256,verification:manifest.verification}));
