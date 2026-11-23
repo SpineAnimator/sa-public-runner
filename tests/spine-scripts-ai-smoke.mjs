@@ -81,11 +81,15 @@ function changedTransformKeyframes(skeleton) {
 const png = syntheticPng();
 const layer = { id: 'synthetic_sprite', sourceName: 'synthetic_sprite', sourceIndex: 0, visible: true, opacity: 255,
   image: png.dataUrl, bounds: { x: 0, y: 0, width: png.width, height: png.height } };
+const sourceLayers = [{ id:'synthetic_sprite', sourceName:'synthetic_sprite', sourceIndex:0, sourceRecordId:'synthetic-record-0', kind:'raster', visible:true, opacity:255, depth:0, groupPath:[], bounds:{x:0,y:0,width:png.width,height:png.height}, selected:true }];
+const sourceFileName = 'synthetic-ai-smoke.psd';
+const compositeAudit = { status:'exact', mismatchPixels:0, maxChannelDelta:0, width:png.width, height:png.height, comparison:'synthetic fixture' };
 const requestId = crypto.randomUUID();
 const request = {
   image: png.dataUrl,
   canvas: { width: png.width, height: png.height },
   layers: [layer],
+  sourceLayers, sourceFileName, compositeAudit,
   description: 'Animate this single synthetic red circular sprite with a gentle left-right rotation, approximately -12 degrees to +12 degrees and back to center over 2 seconds. Keep translation and scale fixed. Include at least three distinct timestamps including the starting and ending setup pose.',
   instructions: 'Synthetic one-layer integration test only; this is not user artwork. Preserve the source layer ID, sourceName and bounds exactly. Frame zero must match the supplied source composition. Create a nonempty Spine clip with real numeric transform keyframes at distinct timestamps and at least one transform property with different values. Do not add, rename, merge or invent source layers. Do not return static fallback motion.'
 };
@@ -124,7 +128,7 @@ assert.ok(hasDistinctAuthoredTransform, 'planner must author a non-static transf
 const buildResponse = await fetch(GENERATOR + '/api/build', {
   method: 'POST',
   headers: { 'content-type': 'application/json', origin: ORIGIN },
-  body: JSON.stringify({ canvas: request.canvas, scene: plan.scene, layers: [layer] }),
+  body: JSON.stringify({ canvas: request.canvas, scene: plan.scene, layers: [layer], sourceLayers, sourceFileName, compositeAudit }),
   signal: AbortSignal.timeout(60000)
 });
 if (!buildResponse.ok) {
@@ -135,7 +139,8 @@ const zip = Buffer.from(await buildResponse.arrayBuffer());
 assert.ok(zip.length > 1000, 'generator ZIP must contain real project data');
 assert.equal(zip.subarray(0,4).toString('hex'), '504b0304', 'generator response must be a ZIP');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-scripts-ai-'));
-const zipPath = path.join(temp, 'synthetic-spine.zip');
+const zipPath = process.env.SA_SMOKE_ZIP_PATH || path.join(temp, 'synthetic-spine.zip');
+fs.mkdirSync(path.dirname(zipPath), { recursive: true });
 fs.writeFileSync(zipPath, zip);
 execFileSync('unzip', ['-t', zipPath], { stdio: 'pipe' });
 const manifest = JSON.parse(execFileSync('unzip', ['-p', zipPath, 'manifest.json'], { encoding: 'utf8' }));
@@ -145,6 +150,17 @@ assert.ok(manifest.sceneBake?.keyCount > 1, 'manifest must report multiple baked
 assert.ok(manifest.sceneBake?.visualNodeCount > 0, 'manifest must report at least one visual node');
 assert.ok(motionTracks.length > 0, 'Spine skeleton must contain a non-static transform track');
 assert.equal(manifest.spine, '4.3.26');
+assert.equal(manifest.version, '1.5.0');
+assert.equal(manifest.sourceLayerCount, 1);
+assert.equal(manifest.sourceLayerMapFile, 'source-layer-map.json');
+assert.equal(manifest.sourceLayerNamesPreserved, true);
+assert.equal(manifest.sourceCompositeAudit?.status, 'exact');
+const sourceMap = JSON.parse(execFileSync('unzip', ['-p', zipPath, 'source-layer-map.json'], { encoding: 'utf8' }));
+assert.equal(sourceMap.sourceFileName, sourceFileName);
+assert.equal(sourceMap.sourceLayers.length, 1);
+assert.equal(sourceMap.sourceLayers[0].sourceName, 'synthetic_sprite');
+assert.equal(sourceMap.sourceLayers[0].exported, true);
+assert.equal(sourceMap.sourceLayers[0].exportId, 'synthetic_sprite');
 assert.equal(manifest.releaseReady, false, 'synthetic smoke must not be marked release-ready');
 assert.equal(manifest.renderEvidence?.status, 'not-rendered');
 assert.equal(manifest.artisticApproval, 'pending');
@@ -163,4 +179,4 @@ console.log(JSON.stringify({
   releaseReady: manifest.releaseReady,
   renderEvidence: manifest.renderEvidence
 }, null, 2));
-fs.rmSync(temp, { recursive: true, force: true });
+if (!process.env.SA_SMOKE_ZIP_PATH) fs.rmSync(temp, { recursive: true, force: true });
