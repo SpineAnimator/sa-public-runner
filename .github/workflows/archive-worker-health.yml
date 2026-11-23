@@ -49,7 +49,8 @@ jobs:
                     body.assetUpload === true &&
                     body.privateArchive === false &&
                     body.maxAssetBytes === 64 * 1024 * 1024 &&
-                    body.provider === 'catbox' &&
+                    body.primaryProvider === 'catbox' &&
+                    body.providerSelection === 'catbox-first-verified-kv-fallback' &&
                     body.fallbackProvider === 'cloudflare-kv' &&
                     body.fallbackTtlSeconds === 2592000;
                 }
