@@ -1,0 +1,47 @@
+name: External HTTP probe (public Ubuntu)
+
+on:
+  push:
+    branches: [main, "task/**"]
+    paths:
+      - ".github/workflows/external-http-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-http:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Probe external HTTPS endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p probe
+          for url in https://example.com/ https://httpbin.org/status/200 https://api.github.com/; do
+            name="$(printf '%s' "$url" | sed -E 's#https://##; s#[^A-Za-z0-9]+#_#g; s#_$##')"
+            echo "=== $url ==="
+            status="$(curl --fail-with-body --silent --show-error --location --max-time 20 \
+              --output "probe/${name}.body" --dump-header "probe/${name}.headers" \
+              --write-out '%{http_code}' "$url")"
+            printf '%s\n' "$status" | tee "probe/${name}.status"
+            test "$status" = "200"
+            sed -n '1,12p' "probe/${name}.headers"
+            head -c 240 "probe/${name}.body"
+            printf '\n'
+          done
+          {
+            echo "runner=$(uname -a)"
+            echo "date_utc=$(date -u +%FT%TZ)"
+            echo "curl=$(curl --version | head -n1)"
+            for f in probe/*.status; do printf '%s=%s\n' "$(basename "$f" .status)" "$(cat "$f")"; done
+          } | tee probe/summary.txt
+      - name: Upload raw HTTP evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: external-http-evidence
+          path: probe/
+          if-no-files-found: error
+          retention-days: 14
