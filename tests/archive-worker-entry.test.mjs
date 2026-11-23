@@ -18,7 +18,7 @@ const readyEntries = {
 };
 
 test('GET /health keeps the manifest gate read-only and reports real KV readiness', async () => {
-  const env = { ARCHIVE: memoryKV(readyEntries), SESSION_SECRET: 'test-session-secret' };
+  const env = { ARCHIVE: memoryKV(readyEntries), SESSION_SECRET: 'test-session-secret-12345678901234567890' };
   const response = await worker.fetch(new Request('https://archive.test/health'), env, {});
   const body = await response.json();
   assert.equal(response.status, 200);
@@ -34,7 +34,7 @@ test('GET /health keeps the manifest gate read-only and reports real KV readines
 });
 
 test('GET /health fails closed when the manifest or archive payload receipt is missing', async () => {
-  const env = { ARCHIVE: memoryKV(), SESSION_SECRET: 'test-session-secret' };
+  const env = { ARCHIVE: memoryKV(), SESSION_SECRET: 'test-session-secret-12345678901234567890' };
   const response = await worker.fetch(new Request('https://archive.test/health'), env, {});
   const body = await response.json();
   assert.equal(response.status, 503);
@@ -45,7 +45,7 @@ test('GET /health fails closed when the manifest or archive payload receipt is m
 test('GET /api/health reports upload availability separately from private GitHub storage', async () => {
   const env = {
     ARCHIVE: memoryKV(readyEntries),
-    SESSION_SECRET: 'test-session-secret',
+    SESSION_SECRET: 'test-session-secret-12345678901234567890',
     GENERATION_REPOSITORY: 'SpineAnimator/spine-animation-library'
   };
   const response = await worker.fetch(new Request('https://archive.test/api/health'), env, {});
