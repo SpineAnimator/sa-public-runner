@@ -18,5 +18,15 @@
   "public_notice": "This branch is public. Its task-specific source modules and tests are intentionally published for isolated CI validation.",
   "public_runner_branch": "task/sa-core-vision-animation-planner-20261123",
   "public_runner_snapshot_commit": "4eeecb460f7ab8a53a4c954e0ed2f4129a850464",
-  "subtask_id": "sa-core-vision-animation-planner"
+  "subtask_id": "sa-core-vision-animation-planner",
+  "required_stages": [
+    "python",
+    "node",
+    "rust",
+    "real-psd",
+    "spine-zip",
+    "official-runtime",
+    "native-editor"
+  ],
+  "source_assets": "No original PSD/customer upload is committed. A later PSD-to-PNG and Spine import stage must retrieve an approved original source separately and verify its full SHA-256."
 }
