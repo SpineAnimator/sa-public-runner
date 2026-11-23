@@ -81,4 +81,4 @@ jobs:
               }
               core.info(`${check.name}: HTTP ${response.status}; read-only health contract passed.`);
             }
-            core.notice('This gate verifies manifest health, asset API readiness and PSD cache health. privateArchive=false is expected while GITHUB_LIBRARY_TOKEN is absent; this does not certify upload/download E2E, Photoshop export, or Spine Editor import.');
+            core.notice('This gate verifies manifest health, asset API readiness and PSD cache health. privateArchive=false is expected while GITHUB_LIBRARY_TOKEN is absent; the separate live E2E reports the actual provider and SHA result. This does not certify Photoshop export or Spine Editor import.');
