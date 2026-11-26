@@ -8,6 +8,10 @@ on:
         required: false
       SPINE_LINUX_URL:
         required: false
+permissions:
+  contents: read
+jobs:
+  convert:
     runs-on: ubuntu-24.04
     timeout-minutes: 28
     env:
