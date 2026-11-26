@@ -62,9 +62,6 @@ jobs:
     defaults:
       run:
         working-directory: 3spine
-    defaults:
-      run:
-        working-directory: 3spine
     needs: backend-container
     steps:
       - name: Checkout private 3Spine source
