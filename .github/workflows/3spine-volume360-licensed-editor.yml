@@ -113,8 +113,10 @@ jobs:
           # Preserve the pinned source identity even if Actions artifact retention/quota
           # removed the archive. In that case rebuild from this exact checked-out
           # source commit with the SAME JS/Rust runtime verification commands.
-          echo "SOURCE_HEAD_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
-          echo "SOURCE_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          {
+            echo "SOURCE_HEAD_SHA=$SOURCE_SHA"
+            echo "SOURCE_RUN_ID=$RUN_ID"
+          } >> "$GITHUB_ENV"
           if [[ ! "${ART_ID:-}" =~ ^[0-9]{8,20}$ ]]; then
             echo "::warning::Pinned source run $RUN_ID has no retained ZIP; rebuilding exact SHA $SOURCE_SHA independently before native Editor QA"
             echo "REBUILD_PINNED_RUNTIME=1" >> "$GITHUB_ENV"
@@ -129,10 +131,15 @@ jobs:
           unzip -t work/input/runtime-evidence.zip > /dev/null
           unzip -q work/input/runtime-evidence.zip -d work/input/unpacked
           ARTIFACT="$(find work/input/unpacked -name real-psd-volume360-spine-4.3.26.zip -type f -print -quit)"
-          test -n "$ARTIFACT" && test -f "$ARTIFACT" || { echo '::error::Pinned ZIP payload missing'; exit 1; }
-          echo "ARCHIVE_FILE=$ARTIFACT" >> "$GITHUB_ENV"
-          echo "SOURCE_HEAD_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
-          echo "SOURCE_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          if [ -z "$ARTIFACT" ] || [ ! -f "$ARTIFACT" ]; then
+            echo '::error::Pinned ZIP payload missing'
+            exit 1
+          fi
+          {
+            echo "ARCHIVE_FILE=$ARTIFACT"
+            echo "SOURCE_HEAD_SHA=$SOURCE_SHA"
+            echo "SOURCE_RUN_ID=$RUN_ID"
+          } >> "$GITHUB_ENV"
           echo "Pinned successful 360 proof: run $RUN_ID, tested $SOURCE_SHA, branch $SOURCE_BRANCH"
 
       - name: Check out the exact original PSD fixture commit for SHA evidence
