@@ -1,0 +1,55 @@
+name: Public Ubuntu executor | Spine Link Computer Editor health
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  health:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - name: Verify public Ubuntu host and browser dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = Linux
+          test "$RUNNER_ARCH" = X64
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb x11-utils x11-xserver-utils libxrandr2 libgl1-mesa-dri libgl1 libxrender1 libxi6 libxext6 libxfixes3 libxcursor1
+          command -v xvfb-run
+          command -v timeout
+          uname -a
+      - name: Install licensed Spine Linux package on the ephemeral public runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SPINE_LINUX_URL" || { echo "::error::SPINE_LINUX_URL is not configured for this caller"; exit 1; }
+          curl --fail --location --silent --show-error --max-time 600 --retry 2 -A 'Mozilla/5.0 (X11; Linux x86_64)' "$SPINE_LINUX_URL" -o "$RUNNER_TEMP/spine-linux.gz"
+          gzip -t "$RUNNER_TEMP/spine-linux.gz"
+          mkdir -p "$RUNNER_TEMP/spine"
+          gzip -dc "$RUNNER_TEMP/spine-linux.gz" | tar -xf - -C "$RUNNER_TEMP/spine"
+          SPINE_CLI="$RUNNER_TEMP/spine/Spine/Spine.sh"
+          test -x "$SPINE_CLI"
+          echo "SPINE_CLI=$SPINE_CLI" >> "$GITHUB_ENV"
+      - name: Verify installed Spine Editor version
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 90 xvfb-run -a "$SPINE_CLI" --version
+          echo "PUBLIC_UBUNTU_SPINE_EDITOR_LAUNCHER_PASS" >> "$GITHUB_STEP_SUMMARY"
+      - name: Report ephemeral executor details
+        if: always()
+        run: |
+          {
+            echo '## Public Ubuntu Spine Editor runner'
+            echo "- Runner: $RUNNER_NAME"
+            echo "- OS: $RUNNER_OS / $RUNNER_ARCH"
+            echo "- Spine launcher: ${SPINE_CLI:-not-installed}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Erase temporary Editor package
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/spine" "$RUNNER_TEMP/spine-linux.gz"
