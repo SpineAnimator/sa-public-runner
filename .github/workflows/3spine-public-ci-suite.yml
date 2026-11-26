@@ -120,7 +120,81 @@ jobs:
           test -s frontend/js/jszip.min.js
           test -s frontend/vendor/spine-canvas-3.7.js
           test -s frontend/vendor/spine-canvas-4.3.13.js
-          if find frontend -type f | grep -Ev '\\.(html|css|js|png)$'; then exit 1; fi
+          if find frontend -type f | grep -Ev '\.(html|css|js|png); then exit 1; fi
+          if grep -Ei 'github_pat_|ghp_[A-Za-z0-9]{20}|BEGIN .*PRIVATE KEY|SPINE_LICENSE|CLOUDFLARE_API_TOKEN' frontend/index.html frontend/preview.html frontend/js/app.js; then
+            echo '::error::Possible secret embedded in public frontend assets'
+            exit 1
+          fi
+      - name: Install dependencies and validate Wrangler dry-run
+        run: |
+          npm ci
+          npx --yes wrangler@latest deploy --dry-run --outdir "$RUNNER_TEMP/dryrun"
+          test -d "$RUNNER_TEMP/dryrun"
+          echo "ASSETS_DRYRUN_OK"
+
+  spine-mask-gateway-unit:
+    name: Spine Mask Native Gateway auth regression tests • public Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test private gateway auth retry and session security
+        run: node --test tests/spine-mask-v2-gateway.test.mjs
+
+  public-site-health:
+    name: Public SpineAnimator site and archive API health • public Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify deployed public site, app JavaScript and archive API
+        shell: bash
+        env:
+          SITE: https://spineanimator.github.io
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors --max-time 15 "$SITE/" -o "$RUNNER_TEMP/index.html"
+          grep -Fq '<title>SPINE ANIMATOR</title>' "$RUNNER_TEMP/index.html"
+          grep -Eq 'src="./app\.js(\?[^"]*)?"' "$RUNNER_TEMP/index.html"
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors --max-time 15 "$SITE/app.js" -o "$RUNNER_TEMP/app.js"
+          node --check "$RUNNER_TEMP/app.js"
+          grep -Fq "const STUDIO = 'https://spine-studio.spine-animator-f8692224.workers.dev';" "$RUNNER_TEMP/app.js"
+          grep -Fq "const EXPORTER = 'https://spine-generator.spine-animator-f8692224.workers.dev';" "$RUNNER_TEMP/app.js"
+          archive="$(curl --fail --silent --show-error --max-time 15 'https://spine-archive.spine-animator-f8692224.workers.dev/api/health')"
+          jq -e '.ok == true' <<<"$archive" >/dev/null
+
+  saver-npm-selftest:
+    name: Spine saver Node regression suite • public Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies and Chrome
+        run: |
+          npm ci
+          bash scripts/install-chrome-linux.sh
+          echo "CHROME_PATH=/usr/bin/google-chrome" >> "$GITHUB_ENV"
+      - name: Run Node saver self-tests
+        run: npm test
+; then exit 1; fi
           if grep -Ei 'github_pat_|ghp_[A-Za-z0-9]{20}|BEGIN .*PRIVATE KEY|SPINE_LICENSE|CLOUDFLARE_API_TOKEN' frontend/index.html frontend/preview.html frontend/js/app.js; then
             echo '::error::Possible secret embedded in public frontend assets'
             exit 1
