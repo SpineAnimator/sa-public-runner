@@ -40,13 +40,17 @@ jobs:
           test "${#workflows[@]}" -gt 0
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 "${workflows[@]}"
           for workflow in "${workflows[@]}"; do
-            if grep -Eq '^[[:space:]]*runs-on:[[:space:]]*\\[?self-hosted' "$workflow"; then
+            if grep -Eiq '^[[:space:]]*runs-on:[[:space:]]*\\[?self-hosted' "$workflow"; then
               echo "::error::Private runner label found in $workflow"
               exit 1
             fi
-            if grep -Eq '^[[:space:]]*runs-on:' "$workflow" && ! grep -Fq 'runs-on: ubuntu-24.04' "$workflow"; then
-              echo "::error::Every public runner job must use ubuntu-24.04: $workflow"
+            if [ "$workflow" = ".github/workflows/build-mask-bridge.yml" ]; then
+              grep -Fq 'runs-on: windows-latest' "$workflow"
+              grep -Fq 'runs-on: macos-latest' "$workflow"
+              test "$(grep -c 'runs-on: ubuntu-24.04' "$workflow")" -ge 2
+            elif grep -Eq '^[[:space:]]*runs-on:' "$workflow" && ! grep -Fq 'runs-on: ubuntu-24.04' "$workflow"; then
+              echo "::error::Only the cross-platform Bridge builder may use Windows/macOS hosted executors: $workflow"
               exit 1
             fi
           done
-          echo 'SA_PUBLIC_REUSABLE_WORKFLOWS_USE_GITHUB_HOSTED_UBUNTU_PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'SA_PUBLIC_REUSABLE_WORKFLOWS_USE_APPROVED_GITHUB_HOSTED_EXECUTORS_PASS' >> "$GITHUB_STEP_SUMMARY"
