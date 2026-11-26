@@ -6,15 +6,6 @@ on:
         required: false
       SPINE_LINUX_URL:
         required: false
-    secrets:
-      SPINE_LICENSE:
-        required: false
-      SPINE_LINUX_URL:
-        required: false
-permissions:
-  contents: read
-jobs:
-  inspect-import:
     runs-on: ubuntu-24.04
     timeout-minutes: 28
     env:
