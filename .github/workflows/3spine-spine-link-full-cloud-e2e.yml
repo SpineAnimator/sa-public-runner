@@ -4,13 +4,6 @@ on:
     secrets:
       SOURCE_REPO_TOKEN:
         required: false
-    secrets:
-      SOURCE_REPO_TOKEN:
-        required: true
-permissions:
-  contents: read
-jobs:
-  site-to-licensed-editor:
     runs-on: ubuntu-24.04
     defaults:
       run:
