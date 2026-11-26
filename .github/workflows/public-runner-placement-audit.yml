@@ -86,7 +86,7 @@ jobs:
                       if not match:
                           continue
                       total += 1
-                      value = match.group(1).strip().strip(chr(34) + chr(39))
+          value = match.group(1).strip().strip("'").strip('"')
                       if value not in allowed and not (value == "macos-latest" and path.name == "2spine-private-ci.yml" and "  macos-app:" in text):
                           failures.append(f"{path}:{number}: runs-on={value!r}; allowed={sorted(allowed)}")
           print(f"WORKFLOW_RUNNER_JOBS_SCANNED={total}")
