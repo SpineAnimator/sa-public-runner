@@ -1,0 +1,57 @@
+name: 3Spine native converter smoke on public Ubuntu
+on:
+  workflow_call:
+    secrets:
+      SOURCE_REPO_TOKEN:
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native-converter-smoke:
+    name: Convert real Spine skeleton fixtures on public Ubuntu 24.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Verify public Ubuntu runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = Linux
+          grep -q 'Ubuntu 24.04' /etc/os-release
+          echo 'PUBLIC_3SPINE_NATIVE_CONVERTER_UBUNTU_24_04_PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
+      - name: Pin private source revision and prepare native converter
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "THREESPINE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          chmod +x backend/converter/SpineSkeletonDataConverter .codespace/convert.py
+          test -x backend/converter/SpineSkeletonDataConverter
+      - name: Build test input ZIP from real fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/in"
+          cp examples/*.skel "$RUNNER_TEMP/in/"
+          (cd "$RUNNER_TEMP/in" && zip -qr "$RUNNER_TEMP/input.zip" .)
+          test -s "$RUNNER_TEMP/input.zip"
+      - name: Convert on public Ubuntu without Codespaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .codespace/convert.py "$RUNNER_TEMP/input.zip" "$RUNNER_TEMP/output.zip"
+          test -s "$RUNNER_TEMP/output.zip"
+      - name: Verify converted plum.json and record provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -p "$RUNNER_TEMP/output.zip" plum.json | python3 -c "import sys,json; d=json.load(sys.stdin); print('VERIFY OK — spine', d['skeleton']['spine'], '| bones', len(d['bones'])); assert d['bones']"
+          echo "3Spine source revision: $THREESPINE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo 'PUBLIC_3SPINE_NATIVE_CONVERTER_PASS' >> "$GITHUB_STEP_SUMMARY"
