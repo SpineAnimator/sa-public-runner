@@ -1,0 +1,82 @@
+name: Generate real d4mmri PSD Spine ZIP
+on:
+  workflow_call:
+    secrets:
+      SOURCE_REPO_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+  contents: write
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout private 3Spine source on public runner
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
+      - name: Pin private source revision
+        run: echo "THREESPINE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: |
+          npm ci
+          npm install --no-save --package-lock=false ag-psd@14.5.2
+          npx playwright install --with-deps chromium
+      - name: Download and verify real source PSD
+        run: |
+          bash -n scripts/fetch_psd_resilient.sh
+          bash scripts/fetch_psd_resilient.sh \
+            'https://files.catbox.moe/d4mmri.psd' /tmp/d4mmri.psd \
+            f8b3e3c6b1808d37da14978387de0ce635ac645c0b6785d64d4f0318e4a55dac
+          python3 - <<'PY'
+          import os
+          p='/tmp/d4mmri.psd'
+          with open(p,'rb') as f: header=f.read(6)
+          assert header==bytes.fromhex('384250530001') and os.stat(p).st_size>1000000
+          import hashlib
+          actual=hashlib.sha256(open(p,'rb').read()).hexdigest()
+          assert actual=='f8b3e3c6b1808d37da14978387de0ce635ac645c0b6785d64d4f0318e4a55dac', 'PSD_SHA256_MISMATCH'
+          print('PSD_SOURCE_VALID',os.stat(p).st_size,actual)
+          PY
+      - name: Verify recovery routes with system DNS deliberately skipped
+        env:
+          PSD_FETCH_SKIP_SYSTEM_DNS: '1'
+        run: |
+          bash scripts/fetch_psd_resilient.sh \
+            'https://files.catbox.moe/d4mmri.psd' "$RUNNER_TEMP/d4mmri-failover.psd" \
+            f8b3e3c6b1808d37da14978387de0ce635ac645c0b6785d64d4f0318e4a55dac
+          cmp /tmp/d4mmri.psd "$RUNNER_TEMP/d4mmri-failover.psd"
+          echo PSD_DNS_RECOVERY_BYTE_IDENTICAL_PASS
+      - name: Generate real cloud Spine ZIP using public browser UI
+        run: node scripts/generate_real_catbox_spine.mjs
+      - name: Verify ZIP
+        run: unzip -t /tmp/d4mmri-spine.zip | tail -3
+      - name: Check all original layer textures and actual Spine animation
+        run: |
+          test "$(unzip -Z -1 /tmp/d4mmri-spine.zip | grep -Ec '^images/[^/]+\.png$')" -eq 16
+          unzip -p /tmp/d4mmri-spine.zip skeleton.json > /tmp/d4mmri-skeleton.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const json=JSON.parse(fs.readFileSync('/tmp/d4mmri-skeleton.json'));
+          if(json.skeleton?.spine!=='4.3.26') throw Error('Spine version mismatch');
+          if(!Array.isArray(json.slots)||json.slots.length!==16) throw Error('Source slot inventory mismatch');
+          if(!Object.keys(json.animations||{}).length) throw Error('No Spine animation');
+          console.log('REAL_PSD_16_TEXTURES_SPINE43_ANIMATION_PASS',Object.keys(json.animations));
+          NODE
+      - name: Save ZIP to private draft release (independent of Actions quota)
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+          GH_REPO: vladleopold/3Spine-core
+        run: |
+          tag='evidence/d4mmri/${{ github.run_id }}'
+          gh release create "$tag" --repo "$GH_REPO" --target "$THREESPINE_SHA" --draft --title "d4mmri Spine output ${{ github.run_id }}" /tmp/d4mmri-spine.zip
