@@ -8,9 +8,9 @@ on:
         required: false
     secrets:
       SPINE_LICENSE:
-        required: true
+        required: false
       SPINE_LINUX_URL:
-        required: true
+        required: false
 permissions:
   contents: read
 jobs:
