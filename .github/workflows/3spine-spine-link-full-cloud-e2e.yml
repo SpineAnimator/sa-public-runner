@@ -7,16 +7,33 @@ jobs:
   site-to-licensed-editor:
     # Playwright 1.59 supports Ubuntu 24.04; hosted latest moved to 26.04.
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: 3spine
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
+          persist-credentials: false
         with:
           persist-credentials: false
           filter: blob:none
           sparse-checkout: |
             scripts/spine-link-full-cloud-e2e.mjs
           sparse-checkout-cone-mode: false
-      - uses: actions/checkout@v4
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
+          persist-credentials: false
         with:
           repository: EsotericSoftware/spine-runtimes
           ref: '4.3'
