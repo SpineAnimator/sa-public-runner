@@ -41,6 +41,7 @@ jobs:
       - name: Install isolated Chromium for visual playback gate
         run: |
           npm install --no-save playwright@1.59.1
+          sudo apt-get update -qq
           npx playwright install chromium --with-deps
       - name: Real project upload, native export, Chromium motion, cleanup
         run: node scripts/spine-link-full-cloud-e2e.mjs
