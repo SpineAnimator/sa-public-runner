@@ -1,0 +1,1318 @@
+name: 2Spine approved PSD - licensed Spine Editor 4.3.26 Linux gate
+# Source QA pulse 2026-11-23: one-shot pinned verification of trusted source PR artifact 44793442612
+
+on:
+  workflow_call:
+    inputs:
+      artifact_run_id:
+        required: false
+        type: string
+        default: ''
+      expected_source_sha:
+        required: false
+        type: string
+        default: ''
+    secrets:
+      SOURCE_REPO_TOKEN:
+        required: true
+      SPINE_LICENSE:
+        required: true
+      SPINE_LINUX_URL:
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: licensed-spine43-3spine-core
+  cancel-in-progress: false
+
+jobs:
+  native-editor:
+    # Licensed Editor credentials are never exposed to pull_request code,
+    # including same-repository PR branches. Use trusted dispatch/manual runs.
+    if: ${{ github.event_name != 'pull_request' &&
+      (github.event_name != 'repository_dispatch' ||
+       (github.event.sender.login == 'vladleopold' && github.event.client_payload.source_repo == 'SpineAnimator/spine-animator-private')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: 3spine
+    env:
+      SOURCE_REPO: SpineAnimator/spine-animator-private
+      # One-time push marker lets this exact main commit exercise the already-verified
+      # private source PR artifact without relying on a mutable "latest main" selector.
+      SOURCE_RUN: "${{ inputs.artifact_run_id || github.event.client_payload.artifact_run_id || (github.event_name == 'push' && github.event.head_commit.message == '2spine-clgb71-pin-source-44793442612' && '44793442612') || '' }}"
+      EXPECTED_SOURCE_SHA: "${{ inputs.expected_source_sha || github.event.client_payload.expected_source_sha || (github.event_name == 'push' && github.event.head_commit.message == '2spine-clgb71-pin-source-44793442612' && '22c122b6eceb97e817c0d89200ec3df45824b3a0') || '' }}"
+      SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
+      SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
+    steps:
+      - name: Checkout trusted 3Spine source on the public executor
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
+          persist-credentials: false
+
+      - name: Pin exact 3Spine source revision
+        run: echo "THREESPINE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Check out official-source validation tooling
+        uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/spine-animator-private
+          ref: main
+          path: source-validation
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
+
+      - name: Require licensed launcher configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SPINE_LICENSE" || { echo "::error::SPINE_LICENSE unavailable for this repository"; exit 1; }
+          test -n "$SPINE_LINUX_URL" || { echo "::error::SPINE_LINUX_URL unavailable for this repository"; exit 1; }
+          mkdir -p work/editor
+
+      - name: Regression-test source dependency freshness before selecting ZIP
+        run: python3 -m unittest discover -s tests -p 'test_guard_clgb71_build_inputs.py'
+
+      - name: Download exact previously validated ZIP artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "::error::ACCESS_TOKEN unavailable for cross-repository artifact access"; exit 1; }
+          # On a manual dispatch a run id may be supplied; otherwise discover fresh
+          # validated pipeline runs and pin the exact approved inner ZIP SHA.
+          # The regenerated ZIP changes hash after mesh fixes.
+          # Accept successful main artifacts or explicitly pinned same-repo PR artifacts.
+          # PR builds never receive editor credentials; only this trusted workflow does.
+          if [ -n "$SOURCE_RUN" ]; then
+            RUN_IDS="$SOURCE_RUN"
+          else
+            # Prioritize the dedicated, freshly-built IK archive. The zombie
+            # workflow is only the fallback; never silently validate stale art.
+            RUN_IDS=$(
+              gh api "repos/$SOURCE_REPO/actions/workflows/clgb71-original-ik-zip.yml/runs?status=success&branch=main&per_page=20" \
+                --jq '.workflow_runs[].id'
+              gh api "repos/$SOURCE_REPO/actions/workflows/zombie-spine-e2e.yml/runs?status=success&branch=main&per_page=20" \
+                --jq '.workflow_runs[].id'
+            )
+          fi
+          test -n "$RUN_IDS" || { echo "::error::No recent successful source workflow runs"; exit 1; }
+          mkdir -p work/input
+          FOUND=0
+          while read -r RUN_ID; do
+            [ -n "$RUN_ID" ] || continue
+            ID=$(gh api "repos/$SOURCE_REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
+              --jq '[.artifacts[] | select(.name == "clgb71-original-38layer-ik-spine-json-zip" and .expired == false)] | last | .id' || true)
+            # Treat source ZIP as untrusted data: this job executes only 3Spine
+            # trusted scripts and source-validation/main, never candidate code.
+            RUN_JSON=$(gh api "repos/$SOURCE_REPO/actions/runs/$RUN_ID")
+            if ! printf '%s' "$RUN_JSON" | jq -e --arg repo "$SOURCE_REPO" --arg sha "$EXPECTED_SOURCE_SHA" --arg explicit "$SOURCE_RUN" '
+              .conclusion == "success" and
+              .repository.full_name == $repo and
+              (.path | contains("/clgb71-original-ik-zip.yml")) and
+              (
+                (.head_branch == "main" and (.event == "push" or .event == "workflow_dispatch") and $sha == "")
+                or
+                ($explicit != "" and $sha != "" and (.head_sha == $sha) and
+                 (.event == "pull_request") and
+                 (.head_repository.full_name == $repo))
+                or
+                ($explicit != "" and $sha != "" and (.head_sha == $sha) and
+                 (.head_branch == "main") and
+                 (.event == "push" or .event == "workflow_dispatch"))
+              )
+            ' >/dev/null; then
+              echo "::warning::Rejecting run $RUN_ID: untrusted provenance, SHA or workflow"
+              continue
+            fi
+            # No stale source ZIP may masquerade as proof of a newer
+            # clgb71 rig / animation generator. Allow docs-only main commits
+            # after the source run, but reject *any* generator/workflow change.
+            # Explicit PR art candidates are already bound to head SHA above.
+            if [ -z "$SOURCE_RUN" ]; then
+              RUN_HEAD_SHA="$(jq -r '.head_sha' <<< "$RUN_JSON")"
+              LIVE_MAIN_SHA="$(gh api "repos/$SOURCE_REPO/branches/main" --jq '.commit.sha')"
+              if [ "$RUN_HEAD_SHA" != "$LIVE_MAIN_SHA" ]; then
+                if ! DIFF_JSON="$(gh api "repos/$SOURCE_REPO/compare/$RUN_HEAD_SHA...$LIVE_MAIN_SHA")"; then
+                  echo "::warning::Cannot prove artifact source ancestry, rejecting run $RUN_ID"
+                  continue
+                fi
+                if ! jq -e '.status == "ahead" or .status == "identical"' <<< "$DIFF_JSON" >/dev/null; then
+                  echo "::warning::Source run diverged from current main, rejecting run $RUN_ID"
+                  continue
+                fi
+                # Check the real clgb71 source-build dependency set,
+                # not unrelated Cherry 360 geometry/Cloudflare/Rust changes.
+                # Reject missing compare data, renamed build inputs, and stale
+                # rig, PSD reader, Node dependencies, or ZIP packager changes.
+                if ! python3 scripts/guard_clgb71_build_inputs.py <<< "$DIFF_JSON"; then
+                  echo "::warning::Actual clgb71 build inputs changed after source run $RUN_ID; rejecting stale archive"
+                  continue
+                fi
+              fi
+            fi
+            rm -rf work/input/* work/input-artifact.zip
+            SOURCE_POINTER="$ID"
+            if [ -n "$ID" ] && [ "$ID" != "null" ]; then
+              if ! curl --fail --location --silent --show-error --retry 2 --max-time 180 \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$SOURCE_REPO/actions/artifacts/$ID/zip" \
+                -o work/input-artifact.zip; then continue; fi
+              if ! unzip -t work/input-artifact.zip >/dev/null; then continue; fi
+              unzip -q work/input-artifact.zip -d work/input
+            else
+              # The primary source workflow can succeed while upload-artifact
+              # fails with the repository quota. Only a private, exact-run
+              # DRAFT Release from trusted main may provide replacement bytes.
+              if [ "$(jq -r '.head_branch' <<< "$RUN_JSON")" != main ]; then continue; fi
+              [[ "$RUN_ID" =~ ^[0-9]{8,20}$ ]] || continue
+              ATTEMPT="$(jq -r '.run_attempt' <<< "$RUN_JSON")"
+              [[ "$ATTEMPT" =~ ^[0-9]+$ ]] || continue
+              TAG="evidence/clgb71-source/${RUN_ID}-attempt-${ATTEMPT}"
+              PRIVATE="$(gh api "repos/$SOURCE_REPO" --jq .private)"
+              if [ "$PRIVATE" != true ]; then
+                echo "::error::Refusing original source ZIP download from public Release"
+                exit 1
+              fi
+              RELEASES="$(gh api "repos/$SOURCE_REPO/releases?per_page=100")"
+              RELEASE="$(jq -c --arg tag "$TAG" '[.[] | select(.tag_name==$tag and .draft==true)] | first // null' <<< "$RELEASES")"
+              if [ "$RELEASE" = null ]; then
+                echo "::warning::No trusted private fallback for source run $RUN_ID"
+                continue
+              fi
+              # Bind the private draft to the EXACT successful source commit.
+              SOURCE_HEAD="$(jq -r '.head_sha' <<< "$RUN_JSON")"
+              if ! jq -e --arg sha "$SOURCE_HEAD" '.target_commitish == $sha' <<< "$RELEASE" >/dev/null; then
+                echo "::warning::Private source draft does not match trusted run commit"
+                continue
+              fi
+              # Reject ambiguous or unpinned asset names.
+              ZIP_ASSET="$(jq -r '[.assets[] | select(.name=="original-ik-spine-4.3.26.zip")] | if length==1 then .[0].id else empty end' <<< "$RELEASE")"
+              RECEIPT_ASSET="$(jq -r '[.assets[] | select(.name=="ik-package-report.json")] | if length==1 then .[0].id else empty end' <<< "$RELEASE")"
+              [[ "$ZIP_ASSET" =~ ^[0-9]+$ && "$RECEIPT_ASSET" =~ ^[0-9]+$ ]] || continue
+              if ! gh api -H 'Accept: application/octet-stream' \
+                "repos/$SOURCE_REPO/releases/assets/$ZIP_ASSET" > work/input/original-ik-spine-4.3.26.zip; then continue; fi
+              if ! gh api -H 'Accept: application/octet-stream' \
+                "repos/$SOURCE_REPO/releases/assets/$RECEIPT_ASSET" > work/input/ik-package-report.json; then continue; fi
+              SOURCE_POINTER="private-draft:${TAG}"
+              echo "VERIFIED_PRIVATE_SOURCE_FALLBACK ${TAG}"
+            fi
+            ZIP="work/input/original-ik-spine-4.3.26.zip"
+            RECEIPT="work/input/ik-package-report.json"
+            if [ -f "$ZIP" ] && [ -f "$RECEIPT" ] && python3 - "$ZIP" "$RECEIPT" <<'PY'
+          import hashlib, json, pathlib, sys, zipfile
+          archive, report = map(pathlib.Path, sys.argv[1:])
+          receipt = json.loads(report.read_text(encoding='utf-8'))
+          expected_source = '7adee866547a3b3cc9838b655cf70865980c5dba00313373cbf903fed776c7b2'
+          assert receipt.get('source_sha256') == expected_source
+          assert receipt.get('export_version') == '4.3.26'
+          assert receipt.get('visible_source_layers') == 38
+          assert receipt.get('png_count') == 38
+          assert receipt.get('actual_ik_constraints') == 2
+          assert set(receipt.get('animations', [])) == {'shoot_up_01', 'shoot_up_02'}
+          assert receipt.get('zip_sha256') == hashlib.sha256(archive.read_bytes()).hexdigest()
+          with zipfile.ZipFile(archive) as z:
+              assert z.testzip() is None
+              assert len(z.namelist()) == len(set(z.namelist())) == 40
+          print('Pinned source ZIP receipt and CRC match')
+          PY
+            then
+              FOUND=1
+              echo "SOURCE_ARTIFACT_ID=$SOURCE_POINTER" >> "$GITHUB_ENV"
+              echo "SOURCE_RUN_SELECTED=$RUN_ID" >> "$GITHUB_ENV"
+              echo "Verified source run: $RUN_ID, evidence: $SOURCE_POINTER"
+              break
+            fi
+          done <<< "$RUN_IDS"
+          test "$FOUND" = 1 || { echo "::error::No approved, unexpired ZIP with pinned SHA-256"; exit 1; }
+
+      - name: Install actual licensed Spine Linux launcher and Xvfb
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$(id -u)" -eq 0 ]; then
+            APT=apt-get
+          else
+            APT="sudo apt-get"
+          fi
+          $APT update -qq
+          $APT install -y xvfb x11-utils x11-xserver-utils libxrandr2 libgl1-mesa-dri libgl1 libxrender1 libxi6 libxext6 libxfixes3 libxcursor1
+          # Existing 3Spine workflow uses the same licensed Linux archive secret.
+          curl --fail --location --silent --show-error --max-time 600 --retry 2 \
+            -A "Mozilla/5.0 (X11; Linux x86_64)" \
+            "$SPINE_LINUX_URL" -o "$RUNNER_TEMP/spine-linux.gz"
+          gzip -t "$RUNNER_TEMP/spine-linux.gz"
+          mkdir -p "$RUNNER_TEMP/spine"
+          gzip -dc "$RUNNER_TEMP/spine-linux.gz" | tar -xf - -C "$RUNNER_TEMP/spine"
+          SPINE_SCRIPT="$RUNNER_TEMP/spine/Spine/Spine.sh"
+          test -x "$SPINE_SCRIPT" || { echo "::error::Spine.sh missing from licensed archive"; exit 1; }
+          echo "SPINE_CLI=$SPINE_SCRIPT" >> "$GITHUB_ENV"
+
+      - name: Install fidelity and image dependencies
+        shell: bash
+        run: python3 -m pip install --quiet 'psd-tools[composite]>=1.10,<2' 'Pillow>=10.3,<14' 'numpy>=1.26,<3'
+
+      - name: Compile native RGB feedback code before licensed runtime starts
+        run: python3 -m py_compile scripts/calibrate_clgb71_native_rgb.py
+
+      - name: Test full-animation render duration and reject invalid key times
+        run: python3 -m unittest discover -s tests -p 'test_editor_animation_coverage.py'
+
+      - name: Verify exit-145 is allowed only with full, nonblank official PNG evidence
+        run: python3 -m unittest discover -s tests -p 'test_spine_editor_png_exit145.py'
+
+      - name: Unit-test RGB-only candidate ZIP immutability and alpha protection
+        run: python3 -m unittest discover -s tests -p 'test_build_clgb71_rgb_candidate_zip.py'
+
+      - name: Import ZIP in actual Spine Editor 4.3.26, reopen and render PNGs
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1600x1000x24' \
+            python3 scripts/verify_clgb71_editor_linux.py \
+              --archive work/input/original-ik-spine-4.3.26.zip \
+              --spine "$SPINE_CLI" \
+              --package-report work/input/ik-package-report.json \
+              --output work/editor
+
+      - name: Re-download original PSD with full pinned hash, then compare all 38 layers
+        shell: bash
+        env:
+          PSD_TEMP_FILE: ${{ github.workspace }}/work/source.psd
+        run: |
+          set -euo pipefail
+          python3 source-validation/tools/verify_zombie_psd.py
+          mkdir -p work/fidelity
+          python3 source-validation/tools/verify_clgb71_fidelity.py \
+            work/source.psd work/input/original-ik-spine-4.3.26.zip work/fidelity
+          python3 source-validation/tools/audit_spine43_candidate.py \
+            work/source.psd work/input/original-ik-spine-4.3.26.zip work/fidelity/candidate-audit.json
+
+      - name: Inspect source Photoshop blend/group stack without altering original pixels
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import collections, json
+          from pathlib import Path
+          profile = json.loads(Path('work/fidelity/source-psd-compositing-profile.json').read_text(encoding='utf-8'))
+          assert profile['schema'] == 'clgb71.source-psd-compositing.v1'
+          layers = profile['layers']
+          assert len(layers) == 38, 'Expected 38 original visible Photoshop layers'
+          blends = dict(sorted(collections.Counter(layer['blend_mode'] for layer in layers).items()))
+          group_blends = dict(sorted(collections.Counter(
+              group['blend_mode'] for layer in layers
+              for group in layer['ancestor_groups']).items()))
+          group_opacity = sorted(set(str(group['opacity'])
+              for layer in layers for group in layer['ancestor_groups']))
+          summary = {
+              'layer_blends': blends,
+              'ancestor_group_blends': group_blends,
+              'ancestor_group_opacities': group_opacity,
+              'clipped_leaf_count': sum(bool(layer['clipping']) for layer in layers),
+              'masked_leaf_count': sum(bool(layer['has_mask']) for layer in layers),
+              'non_default_leaf_opacity_count': sum(layer['opacity'] not in (255, None) for layer in layers),
+              'unsupported_slot_blend_count': len(profile['unsupported_psd_blend_layers']),
+              'photoshop_effect_reproduction_needed_count':
+                  len(profile['unsupported_photoshop_compositing_layers']),
+              'photoshop_effect_layers':
+                  profile['unsupported_photoshop_compositing_layers'],
+              'render_parity_proven': False,
+          }
+          print('SOURCE_PHOTOSHOP_COMPOSITING_METADATA', json.dumps(summary, sort_keys=True))
+          PY
+
+      - name: Audit original Photoshop shadow locality and opaque RGB divergence
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          profile = json.loads(Path('work/fidelity/source-psd-compositing-profile.json').read_text())
+          effect = json.loads(Path('work/fidelity/psd-effect-footprints.json').read_text())
+          assert effect['schema'] == 'clgb71.photoshop-effect-locality.v1'
+          assert set(profile['unsupported_photoshop_compositing_layers']) == {
+              'card-2', 'card-5', 'card-7', 'card-9'}
+          assert len(effect['effect_regions']) == 4
+          assert all(e['shadow_parameters'] for e in effect['effect_regions'])
+          assert effect['shadow_causality_proven'] is False
+          assert effect['photoshop_parity_proven'] is False
+          assert 0 <= effect['outside_share_of_total_rgb_error'] <= 1
+          assert effect['outside_fully_opaque_pixels'] > 100
+          assert effect['outside_fully_opaque_rgb_mae_255'] is not None
+          assert effect['top_outside_shadow_hotspots']
+          print('SOURCE_PSD_EFFECT_LOCALITY', json.dumps({
+              'effect_regions': len(effect['effect_regions']),
+              'outside_rgb_error_share': effect['outside_share_of_total_rgb_error'],
+              'opaque_non_shadow_rgb_mae': effect['outside_fully_opaque_rgb_mae_255'],
+              'top_spatial_hotspots': effect['top_outside_shadow_hotspots'][:3],
+              'photoshop_parity_proven': False,
+              'artistic_quality_approved': False,
+          }, sort_keys=True))
+          PY
+
+      - name: Preserve read-only source ICC metadata before native art review
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+          path = Path('work/fidelity/source-psd-color-resources.json')
+          doc = json.loads(path.read_text(encoding='utf-8'))
+          assert doc['schema'] == 'clgb71.source-psd-color-resources.v1'
+          assert doc['has_saved_merged_preview'] is True
+          assert doc['icc_transform_causality_proven'] is False
+          assert doc['saved_preview_color_truth_approved'] is False
+          if doc['has_embedded_icc_profile']:
+              assert doc['icc_profile_bytes'] > 0
+              assert re.fullmatch(r'[0-9a-f]{64}', doc['icc_profile_sha256'])
+          else:
+              assert doc['icc_profile_bytes'] == 0 and doc['icc_profile_sha256'] is None
+          print('PSD_COLOR_RESOURCES', json.dumps({
+              'mode': doc['color_mode'], 'depth': doc['bit_depth'],
+              'embedded_icc': doc['has_embedded_icc_profile'],
+              'icc_sha256': doc['icc_profile_sha256'],
+              'artist_approved': False}, sort_keys=True))
+          PY
+
+      - name: Unit-test PSD versus genuine Spine Editor RGB parity
+        run: python3 -m unittest discover -s tests -p 'test_audit_psd_editor_color.py'
+
+      - name: Audit Photoshop composite versus real native Editor rest frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_psd_editor_color.py \
+            --psd-composite work/fidelity/source-psd-composite.png \
+            --layer-composite work/fidelity/exported-layer-composite-approx.png \
+            --forced-recomposite work/fidelity/source-psd-recomputed-from-layers.png \
+            --editor-screenshots work/editor/screenshots \
+            --output work/editor/psd-editor-color-evidence.json
+          # Never silently convert an RGB mismatch into artistic approval.
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('work/editor/psd-editor-color-evidence.json').read_text())
+          assert report['status'] in {'PASS_COLOR_COMPOSITE_PARITY', 'BLOCK_ARTISTIC_COLOR_FIDELITY'}
+          assert report['artistic_quality_approved'] is False and report['release_ready'] is False
+          print('ARTISTIC_COLOR_GATE', report['status'])
+          assert report.get('color_divergence_triage') is not None
+          assert report['color_divergence_triage']['root_cause_proven'] is False
+          split = report['color_divergence_triage']['source_reference_split']
+          assert split['root_cause_proven'] is False
+          print('COLOR_STAGE_TRIAGE', report['color_divergence_triage']['dominant_measured_mismatch_stage'])
+          print('UNRESOLVED_PSD_COLOR_REFERENCE', split['source_reference_conflict_unresolved'])
+          PY
+
+      - name: Regenerate Photoshop RGB candidate on trusted runner from exact original PSD and ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Avoid dependence on GitHub Actions artifact storage quota for the
+          # derived textures. The only input PNGs are from the verified archive.
+          python3 source-validation/tools/reconstruct_psd_rgb_appearance.py \
+            work/source.psd \
+            work/editor/source/images \
+            work/input/psd-rgb-candidate
+
+      - name: Bind Photoshop RGB-corrected PNGs to exact original ZIP without changing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build_clgb71_rgb_candidate_zip.py \
+            --source work/input/original-ik-spine-4.3.26.zip \
+            --receipt work/input/ik-package-report.json \
+            --images work/input/psd-rgb-candidate/derived-images \
+            --color-report work/input/psd-rgb-candidate/color-inversion-report.json \
+            --output work/rgb-candidate/clgb71-rgb-candidate.zip \
+            --output-receipt work/rgb-candidate/ik-package-rgb-candidate-report.json
+
+      - name: Import corrected RGB candidate in LICENSED Editor 4.3.26 and render both complete clips
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1600x1000x24' \
+            python3 scripts/verify_clgb71_editor_linux.py \
+              --archive work/rgb-candidate/clgb71-rgb-candidate.zip \
+              --package-report work/rgb-candidate/ik-package-rgb-candidate-report.json \
+              --spine "$SPINE_CLI" \
+              --output work/rgb-editor
+
+      - name: Compare REAL corrected Editor PNGs against saved Photoshop composite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_psd_editor_color.py \
+            --psd-composite work/fidelity/source-psd-composite.png \
+            --layer-composite work/fidelity/exported-layer-composite-approx.png \
+            --forced-recomposite work/fidelity/source-psd-recomputed-from-layers.png \
+            --editor-screenshots work/rgb-editor/screenshots \
+            --output work/rgb-editor/psd-editor-rgb-candidate-parity.json
+          python3 scripts/audit_clgb71_spine_render.py \
+            --frames-dir work/rgb-editor/screenshots \
+            --report work/rgb-editor/rgb-candidate-render-anomaly.json
+          python3 scripts/audit_spine_pose_sequence.py \
+            --frames-dir work/rgb-editor/screenshots \
+            --report work/rgb-editor/rgb-candidate-motion-continuity.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          old=json.loads(Path('work/editor/psd-editor-color-evidence.json').read_text())
+          new=json.loads(Path('work/rgb-editor/psd-editor-rgb-candidate-parity.json').read_text())
+          native=json.loads(Path('work/rgb-editor/editor-roundtrip-report.json').read_text())
+          candidate=json.loads(Path('work/input/psd-rgb-candidate/color-inversion-report.json').read_text())
+          assert native['editor_import_verified'] and native['native_spine_project_verified']
+          assert native['slots']==38 and native['ik_constraints']==2
+          assert set(native['full_animation_frame_coverage'])=={'shoot_up_01','shoot_up_02'}
+          assert all(v['rendered_frames']>=49 for v in native['full_animation_frame_coverage'].values())
+          status={}
+          for clip in ('shoot_up_01','shoot_up_02'):
+              previous=old['clip_evidence'][clip]['start']
+              actual=new['clip_evidence'][clip]['start']
+              status[clip]={'original_editor_start_rgb_mae':previous['rgb_mae_255'],
+                            'corrected_editor_start_rgb_mae':actual['rgb_mae_255'],
+                            'alpha_mae':actual['alpha_mae_255'],
+                            'over20_fraction':actual['visible_fraction_any_channel_diff_gt20']}
+          success=all(
+              v['corrected_editor_start_rgb_mae'] < v['original_editor_start_rgb_mae']
+              and v['corrected_editor_start_rgb_mae'] <= 3.0
+              and v['alpha_mae'] <= 2.0
+              and v['over20_fraction'] <= .05
+              for v in status.values())
+          report={'schema':'2spine.licensed-4.3.26-rgb-candidate-parity.v1',
+                  'source_psd_sha256':candidate['source_sha256'],
+                  'real_licensed_spine_editor_4_3_26':True,
+                  'full_editor_frames_checked':sum(v['rendered_frames'] for v in native['full_animation_frame_coverage'].values()),
+                  'original_source_images_unchanged':True,
+                  'start_frame_color':status,'color_gate_pass':success,
+                  'artistic_quality_approved':False,'release_ready':False}
+          Path('work/rgb-editor/rgb-candidate-final-verdict.json').write_text(json.dumps(report,indent=2)+'\n')
+          print('LICENSED_EDITOR_RGB_CANDIDATE_VERDICT',json.dumps(report,sort_keys=True))
+          if not success:
+              print('RGB_INITIAL_CANDIDATE_NEEDS_NATIVE_FEEDBACK',status)
+          PY
+
+      - name: Derive bounded RGB feedback from authentic licensed Editor screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/calibrate_clgb71_native_rgb.py \
+            --psd work/source.psd \
+            --images work/input/psd-rgb-candidate/derived-images \
+            --native-frames work/rgb-editor/screenshots \
+            --output work/rgb-feedback
+
+      - name: Package alternate native RGB feedback while retaining exact original ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build_clgb71_rgb_candidate_zip.py \
+            --source work/input/original-ik-spine-4.3.26.zip \
+            --receipt work/input/ik-package-report.json \
+            --images work/rgb-feedback/derived-images \
+            --color-report work/input/psd-rgb-candidate/color-inversion-report.json \
+            --output work/rgb-feedback/clgb71-feedback-candidate.zip \
+            --output-receipt work/rgb-feedback/ik-package-feedback-report.json
+
+      - name: Import RGB feedback ZIP in genuine licensed Spine Editor and render 98 frames
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1600x1000x24' \
+            python3 scripts/verify_clgb71_editor_linux.py \
+              --archive work/rgb-feedback/clgb71-feedback-candidate.zip \
+              --package-report work/rgb-feedback/ik-package-feedback-report.json \
+              --spine "$SPINE_CLI" \
+              --output work/rgb-feedback/editor
+
+      - name: Verify actual feedback frames and reject false Photoshop RGB approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_psd_editor_color.py \
+            --psd-composite work/fidelity/source-psd-composite.png \
+            --layer-composite work/fidelity/exported-layer-composite-approx.png \
+            --forced-recomposite work/fidelity/source-psd-recomputed-from-layers.png \
+            --editor-screenshots work/rgb-feedback/editor/screenshots \
+            --output work/rgb-feedback/editor/psd-editor-feedback-parity.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          previous=json.loads(Path('work/rgb-editor/psd-editor-rgb-candidate-parity.json').read_text())
+          feedback=json.loads(Path('work/rgb-feedback/editor/psd-editor-feedback-parity.json').read_text())
+          frames=json.loads(Path('work/rgb-feedback/editor/editor-roundtrip-report.json').read_text())
+          assert frames['editor_import_verified'] and frames['slots']==38 and frames['ik_constraints']==2
+          assert len(frames['official_rendered_frames'])>=98
+          def thresholds(report):
+              all_checks=[report['clip_evidence'][clip][pos]
+                          for clip in ('shoot_up_01','shoot_up_02')
+                          for pos in ('start','end')]
+              passed=all(x['rgb_mae_255']<=3.0 and x['alpha_mae_255']<=2.0
+                         and x['visible_fraction_any_channel_diff_gt20']<=.05
+                         for x in all_checks)
+              score=max(max(x['rgb_mae_255']/3.0,
+                            x['alpha_mae_255']/2.0,
+                            x['visible_fraction_any_channel_diff_gt20']/.05)
+                        for x in all_checks)
+              return passed,round(score,4),all_checks
+          ok0,s0,_=thresholds(previous)
+          ok1,s1,_=thresholds(feedback)
+          selected='feedback' if ok1 and s1<s0 else 'initial' if ok0 else 'NONE'
+          report={'schema':'2spine.licensed-rgb-feedback-final-verdict.v1',
+                  'photoshop_reference_sha256':'7adee866547a3b3cc9838b655cf70865980c5dba00313373cbf903fed776c7b2',
+                  'initial_native_exact_rgba_parity':previous['absolute_pixel_parity_proven'],
+                  'feedback_native_exact_rgba_parity':feedback['absolute_pixel_parity_proven'],
+                  'initial_rgba_mismatched_pixels':{
+                      clip:{pos:previous['clip_evidence'][clip][pos]['exact_rgba_mismatched_pixels']
+                            for pos in ('start','end')}
+                      for clip in ('shoot_up_01','shoot_up_02')},
+                  'feedback_rgba_mismatched_pixels':{
+                      clip:{pos:feedback['clip_evidence'][clip][pos]['exact_rgba_mismatched_pixels']
+                            for pos in ('start','end')}
+                      for clip in ('shoot_up_01','shoot_up_02')},
+                  'first_native_candidate_pass':ok0,
+                  'first_native_quality_ratio':s0,
+                  'feedback_native_candidate_pass':ok1,
+                  'feedback_native_quality_ratio':s1,
+                  'selected_candidate':selected,
+                  'full_native_feedback_frames':len(frames['official_rendered_frames']),
+                  'original_layers_and_alpha_preserved':True,
+                  'artistic_quality_approved':False,
+                  'release_ready':False}
+          Path('work/rgb-feedback/final-verdict.json').write_text(json.dumps(report,indent=2)+'\n')
+          print('LICENSED_EDITOR_RGB_FEEDBACK_FINAL',json.dumps(report,sort_keys=True))
+          if selected=='NONE':
+              raise SystemExit('Original Photoshop RGB parity still blocked after licensed feedback')
+          PY
+
+      # The first Photoshop-aware inverse is not sufficient: renderer texture
+      # sampling and original PSD compositing require a second actual native
+      # measurement. This is a distinct candidate, never a silent replacement.
+      - name: Recalibrate second RGB pass from genuine Editor feedback frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/calibrate_clgb71_native_rgb.py \
+            --psd work/source.psd \
+            --images work/rgb-feedback/derived-images \
+            --native-frames work/rgb-feedback/editor/screenshots \
+            --output work/rgb-feedback-2
+
+      - name: Build second-pass RGB-only candidate from unchanged source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build_clgb71_rgb_candidate_zip.py \
+            --source work/input/original-ik-spine-4.3.26.zip \
+            --receipt work/input/ik-package-report.json \
+            --images work/rgb-feedback-2/derived-images \
+            --color-report work/input/psd-rgb-candidate/color-inversion-report.json \
+            --output work/rgb-feedback-2/clgb71-feedback-candidate.zip \
+            --output-receipt work/rgb-feedback-2/ik-package-feedback-report.json
+
+      - name: Verify second pass with licensed Spine 4.3.26 over both complete clips
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1600x1000x24' \
+            python3 scripts/verify_clgb71_editor_linux.py \
+              --archive work/rgb-feedback-2/clgb71-feedback-candidate.zip \
+              --package-report work/rgb-feedback-2/ik-package-feedback-report.json \
+              --spine "$SPINE_CLI" \
+              --output work/rgb-feedback-2/editor
+
+      - name: Compare second licensed render and retain only strictly improved RGB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_psd_editor_color.py \
+            --psd-composite work/fidelity/source-psd-composite.png \
+            --layer-composite work/fidelity/exported-layer-composite-approx.png \
+            --forced-recomposite work/fidelity/source-psd-recomputed-from-layers.png \
+            --editor-screenshots work/rgb-feedback-2/editor/screenshots \
+            --output work/rgb-feedback-2/editor/psd-editor-feedback-parity.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('work/rgb-feedback/final-verdict.json')
+          previous=json.loads(p.read_text())
+          updated=json.loads(Path('work/rgb-feedback-2/editor/psd-editor-feedback-parity.json').read_text())
+          frames=json.loads(Path('work/rgb-feedback-2/editor/editor-roundtrip-report.json').read_text())
+          assert frames['editor_import_verified'] and frames['slots']==38 and frames['ik_constraints']==2
+          assert len(frames['official_rendered_frames'])>=98
+          checks=[updated['clip_evidence'][clip][pos]
+                  for clip in ('shoot_up_01','shoot_up_02') for pos in ('start','end')]
+          passed=all(c['rgb_mae_255']<=3.0 and c['alpha_mae_255']<=2.0
+                     and c['visible_fraction_any_channel_diff_gt20']<=.05 for c in checks)
+          score=round(max(max(c['rgb_mae_255']/3.0,c['alpha_mae_255']/2.0,
+                              c['visible_fraction_any_channel_diff_gt20']/.05)
+                          for c in checks),4)
+          previous_best=(previous['feedback_native_quality_ratio']
+                         if previous['selected_candidate']=='feedback'
+                         else previous['first_native_quality_ratio'])
+          previous['feedback_round_two_pass']=passed
+          previous['feedback_round_two_quality_ratio']=score
+          previous['feedback_round_two_rgba_mismatched_pixels']={
+              clip:{pos:updated['clip_evidence'][clip][pos]['exact_rgba_mismatched_pixels']
+                    for pos in ('start','end')}
+              for clip in ('shoot_up_01','shoot_up_02')}
+          previous['feedback_round_two_exact_rgba_parity']=updated['absolute_pixel_parity_proven']
+          if passed and score<previous_best:
+              previous['selected_candidate']='feedback_2'
+          previous['selected_exact_rgba_parity']=(
+              updated['absolute_pixel_parity_proven']
+              if previous['selected_candidate']=='feedback_2'
+              else previous['feedback_native_exact_rgba_parity']
+              if previous['selected_candidate']=='feedback'
+              else previous['initial_native_exact_rgba_parity'])
+          # Tolerance acceptance and exact equality are separate conclusions.
+          # Never promote to artistic approval or publish a candidate as final.
+          assert previous['artistic_quality_approved'] is False
+          assert previous['release_ready'] is False
+          p.write_text(json.dumps(previous,indent=2,sort_keys=True)+'\n')
+          print('LICENSED_EDITOR_RGB_SECOND_FEEDBACK_FINAL',
+                json.dumps(previous,sort_keys=True))
+          PY
+
+      - name: Assemble source and first / middle / last of both complete clips
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import math
+          from pathlib import Path
+          from PIL import Image, ImageOps, ImageDraw
+          source = Image.open('work/fidelity/source-psd-composite.png').convert('RGBA')
+          root = Path('work/editor/screenshots')
+          coverage = json.loads(Path('work/editor/editor-roundtrip-report.json').read_text())['full_animation_frame_coverage']
+          destinations = [('Original approved PSD', source)]
+          for clip in ('shoot_up_01', 'shoot_up_02'):
+              frames = sorted((root / clip).rglob('*.png'))
+              required = coverage[clip]['expected_min_frames']
+              if len(frames) < required or len(frames) < 3:
+                  raise SystemExit(f'Incomplete {clip}: {len(frames)} < {required}')
+              for label, index in (('start', 0), ('middle', len(frames)//2), ('end', -1)):
+                  destinations.append((f'{clip}: {label}', Image.open(frames[index]).convert('RGBA')))
+          w, h, top, cols = 600, 490, 40, 3
+          rows = math.ceil(len(destinations)/cols)
+          sheet = Image.new('RGB', (w * cols, (h + top) * rows), '#343741')
+          draw = ImageDraw.Draw(sheet)
+          for i, (label, im) in enumerate(destinations):
+              cell_x = (i % cols) * w
+              cell_y = (i // cols) * (h + top)
+              view = ImageOps.contain(im, (w - 24, h - 24))
+              bg = Image.new('RGBA', view.size, '#343741')
+              bg.alpha_composite(view)
+              sheet.paste(bg.convert('RGB'), (cell_x + (w-view.width)//2, cell_y + top+(h-view.height)//2))
+              draw.text((cell_x+12, cell_y+14), label, fill='white')
+          sheet.save('work/editor/visual-review-side-by-side.png')
+          PY
+
+      - name: Unit-test official-render evidence (forged, static, missing)
+        run: python3 -m unittest discover -s tests -p 'test_audit_rendered_frames.py'
+
+      - name: Audit official Editor PNGs and generate hash-bound artistic contact sheet
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_rendered_frames.py \
+            --archive work/input/original-ik-spine-4.3.26.zip \
+            --editor-dir work/editor \
+            --fidelity-report work/fidelity/fidelity-report.json \
+            --source-composite work/fidelity/source-psd-composite.png \
+            --output work/editor/art-review
+
+      - name: Unit-test automatic official-render visual continuity with negative examples
+        run: python3 -m unittest discover -s tests -p 'test_audit_spine_pose_sequence.py'
+
+      - name: Block visibly broken or incomplete poses before native ZIP publication
+        run: |
+          python3 scripts/audit_spine_pose_sequence.py \
+            --frames-dir work/editor/screenshots \
+            --report work/editor/visual-continuity-report.json
+
+      - name: Unit-test official Editor cyan compositing regression guard
+        run: python3 -m unittest discover -s tests -p 'test_audit_clgb71_spine_render.py'
+
+      - name: Reject opaque cyan eruption in actual Editor frames before native ZIP publication
+        run: |
+          python3 scripts/audit_clgb71_spine_render.py \
+            --frames-dir work/editor/screenshots \
+            --report work/editor/render-anomaly-report.json
+
+      - name: Recompute independently constraint-solved native Spine 4.3 runtime poses
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix source-validation --ignore-scripts
+          node source-validation/tools/export_spine_contact_poses.mjs \
+            --bundle work/input/original-ik-spine-4.3.26.zip \
+            --out work/editor/runtime-contact-poses.json
+
+      - name: Record honest upward-shooting legibility from 60Hz post-IK matrices
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Technical Editor compatibility and artistic *direction* are separate.
+          # A rejected pose must be recorded without deleting the private,
+          # technically valid native project or falsely certifying its artwork.
+          set +e
+          node source-validation/tools/audit_clgb71_aim.mjs \
+            --archive work/input/original-ik-spine-4.3.26.zip \
+            --receipt work/input/ik-package-report.json \
+            --poses work/editor/runtime-contact-poses.json \
+            --report work/editor/native-aim-report.json
+          code=$?
+          set -e
+          python3 - "$code" <<'PY'
+          import json,sys
+          from pathlib import Path
+          report=json.loads(Path('work/editor/native-aim-report.json').read_text())
+          status=report.get('status')
+          code=int(sys.argv[1])
+          if (code==0 and status!='PASS_TECHNICAL_DIRECTION') or (
+              code==1 and status!='FAIL_ACTION_LEGIBILITY'):
+              raise SystemExit('Invalid source-bound native aim proof')
+          assert report.get('artistic_quality_approved') is False
+          assert report.get('release_ready') is False
+          if status=='FAIL_ACTION_LEGIBILITY':
+              print('::warning::Genuine Editor animation is semantically under-raised; artistic approval BLOCKED')
+          else:
+              print('Upward aiming direction passed technical guard; full artistic approval still pending')
+          PY
+
+      - name: Generate all protected layer UV alpha PNG masks at 60Hz
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/emit_runtime_contact_masks.py \
+            --bundle work/input/original-ik-spine-4.3.26.zip \
+            --runtime-poses work/editor/runtime-contact-poses.json \
+            --out-dir work/editor/contact_masks
+
+      - name: Unit-test contact guard against safe motion and simulated sprite detachments
+        run: |
+          python3 -m unittest discover -s tests -p 'test_guard_spine_contacts.py'
+          python3 -m unittest discover -s tests -p 'test_emit_runtime_contact_masks.py'
+
+      - name: Enforce weapon and finger attachment continuity over entire clip
+        shell: bash
+        run: |
+          python3 scripts/guard_spine_contacts.py \
+            --bundle work/input/original-ik-spine-4.3.26.zip \
+            --runtime-poses work/editor/runtime-contact-poses.json \
+            --frame-masks-dir work/editor/contact_masks \
+            --report work/editor/attachment-contact-report.json
+
+      - name: Package an independently licensed-Editor-verified native ZIP with all 38 original PNGs
+        id: native_zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,zipfile
+          from pathlib import Path
+          inp=Path('work/input/original-ik-spine-4.3.26.zip')
+          native=Path('work/editor/clgb71-editor-4.3.26.spine')
+          rep=Path('work/editor/editor-roundtrip-report.json')
+          fidelity=Path('work/fidelity/fidelity-report.json')
+          sheet=Path('work/editor/visual-review-side-by-side.png')
+          art=Path('work/editor/art-review/artistic-evidence-report.json')
+          visual=Path('work/editor/visual-continuity-report.json')
+          aim=Path('work/editor/native-aim-report.json')
+          aim_data=json.loads(aim.read_text())
+          assert aim_data['status'] in ('PASS_TECHNICAL_DIRECTION','FAIL_ACTION_LEGIBILITY')
+          assert aim_data['artistic_quality_approved'] is False
+          assert aim_data['release_ready'] is False
+          cyan=Path('work/editor/render-anomaly-report.json')
+          cyan_data=json.loads(cyan.read_text())
+          assert cyan_data['status'] == 'NO_DETECTED_FLAT_CYAN_ANOMALY'
+          assert cyan_data['official_spine_render_reviewed'] is True
+          assert cyan_data['artistic_quality_approved'] is False
+          assert cyan_data['release_ready'] is False
+          assert {c['clip'] for c in cyan_data['clips']} == {'shoot_up_01', 'shoot_up_02'}
+          assert all(c['frames_checked'] >= 49 for c in cyan_data['clips'])
+          visual_data=json.loads(visual.read_text())
+          assert visual_data['status'] == 'PASS_TECHNICAL_VISUAL_REGRESSION'
+          assert visual_data['visual_anomaly_guard_passed'] is True
+          assert visual_data['artistic_quality_approved'] is False
+          art_data=json.loads(art.read_text())
+          assert art_data['editor_import_verified'] and art_data['official_frame_evidence_verified']
+          assert art_data['artistic_quality_approved'] is False
+          assert art_data['source_archive_sha256'] == hashlib.sha256(inp.read_bytes()).hexdigest()
+          dst=Path('work/editor/clgb71-spine-4.3.26-native-verified.zip')
+          report=json.loads(rep.read_text())
+          assert report['editor_import_verified'] and report['native_spine_project_verified']
+          assert report['artistic_quality_approved'] is False
+          assert report['source_archive_sha256']==hashlib.sha256(inp.read_bytes()).hexdigest()
+          with zipfile.ZipFile(inp) as original, zipfile.ZipFile(dst,'w',zipfile.ZIP_DEFLATED,compresslevel=7) as z:
+              assert original.testzip() is None
+              names=original.namelist()
+              assert len([n for n in names if n.startswith('images/') and n.endswith('.png')])==38
+              for name in names: z.writestr(name,original.read(name))
+              z.write(native,'clgb71-editor-4.3.26.spine')
+              z.write(rep,'validation/editor-roundtrip-report.json')
+              z.write(fidelity,'validation/fidelity-report.json')
+              z.write('work/fidelity/psd-effect-footprints.json',
+                      'validation/psd-effect-footprints.json')
+              z.write(sheet,'validation/source-vs-render.png')
+              z.write(art,'validation/artistic-evidence-report.json')
+              z.write(visual,'validation/visual-continuity-report.json')
+              z.write(aim,'validation/native-aim-report.json')
+              z.write(cyan,'validation/render-anomaly-report.json')
+              z.write('work/editor/psd-editor-color-evidence.json','validation/psd-editor-color-evidence.json')
+              z.write('work/editor/runtime-contact-poses.json','validation/runtime-contact-poses.json')
+              z.write('work/editor/contact_masks/manifest.json','validation/contact-mask-manifest.json')
+              z.write('work/editor/art-review/artistic-review-contact-sheet.png','validation/artistic-review-contact-sheet.png')
+          with zipfile.ZipFile(dst) as check:
+              assert check.testzip() is None
+              assert 'clgb71-editor-4.3.26.spine' in check.namelist()
+          print('TECHNICAL_NATIVE_ZIP',dst,hashlib.sha256(dst.read_bytes()).hexdigest())
+          PY
+
+      - name: Preserve bounded artistic-verdict summary despite artifact quota errors
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('work/editor')
+          report_paths = {
+              'editor': root/'editor-roundtrip-report.json',
+              'color': root/'psd-editor-color-evidence.json',
+              'art': root/'art-review/artistic-evidence-report.json',
+              'aim': root/'native-aim-report.json',
+              'continuity': root/'visual-continuity-report.json',
+              'contacts': root/'attachment-contact-report.json',
+              'psd_profile': Path('work/fidelity/source-psd-color-resources.json'),
+              'rgb_candidate': Path('work/rgb-editor/rgb-candidate-final-verdict.json'),
+              'rgb_feedback': Path('work/rgb-feedback/final-verdict.json'),
+          }
+          reports = {}
+          for name, path in report_paths.items():
+              if path.is_file():
+                  try:
+                      reports[name] = json.loads(path.read_text())
+                  except (ValueError, OSError):
+                      reports[name] = {}
+          original = Path('work/input/original-ik-spine-4.3.26.zip')
+          source_hash = hashlib.sha256(original.read_bytes()).hexdigest() if original.is_file() else 'not-created'
+          art = reports.get('art', {})
+          summary = [
+              '## 2Spine licensed artistic evidence (not artistic approval)',
+              '',
+              f'- Exact source Spine ZIP SHA-256: `{source_hash}`',
+              f"- Spine Editor 4.3.26 native import: `{reports.get('editor', {}).get('editor_import_verified', False)}`",
+              f"- Official render verified: `{art.get('official_frame_evidence_verified', False)}`",
+              f"- Source PSD preview color: `{reports.get('color', {}).get('status', 'NO_REPORT')}`",
+              f"- Action direction: `{reports.get('aim', {}).get('status', 'NO_REPORT')}`",
+              f"- Frame continuity: `{reports.get('continuity', {}).get('status', 'NO_REPORT')}`",
+              '- Human artistic acceptance: **NOT APPROVED**',
+              '- If upload-artifact fails, official PNGs and full proof are **not retained by this run**.',
+          ]
+          rgb = reports.get('rgb_candidate', {})
+          if rgb:
+              summary.append(f"- Corrected textures licensed Editor RGB gate: `{rgb.get('color_gate_pass', False)}`")
+              summary.append(f"- Corrected textures full official frames: `{rgb.get('full_editor_frames_checked', 0)}`")
+              for clip, item in rgb.get('start_frame_color', {}).items():
+                  summary.append(f"- {clip} native start-frame RGB MAE: `{item.get('original_editor_start_rgb_mae')} -> {item.get('corrected_editor_start_rgb_mae')}`")
+          else:
+              summary.append('- RGB candidate licensed Editor proof: **NOT COMPLETED**')
+          feedback = reports.get('rgb_feedback', {})
+          if feedback:
+              summary.append(f"- Real licensed Editor selected RGB candidate: `{feedback.get('selected_candidate', 'NONE')}`")
+              summary.append(f"- RGB feedback tolerance check: `{feedback.get('feedback_native_candidate_pass', False)}`")
+              summary.append(f"- Native RGB feedback frames: `{feedback.get('full_native_feedback_frames', 0)}`")
+              summary.append('- Selected color candidate is PRIVATE TECHNICAL EVIDENCE, NOT artistic approval.')
+          profile = reports.get('psd_profile', {})
+          if profile:
+              summary.append(f"- Source PSD color mode/depth: `{profile.get('color_mode', 'unknown')}` / `{profile.get('bit_depth', 'unknown')}`")
+              summary.append(f"- Source ICC profile embedded: `{profile.get('has_embedded_icc_profile', 'unknown')}`")
+              summary.append(f"- Source ICC SHA-256: `{profile.get('icc_profile_sha256') or 'none'}`")
+          triage = reports.get('color', {}).get('color_divergence_triage') or {}
+          split = triage.get('source_reference_split') or {}
+          if split:
+              for field, key in [
+                  ('Saved PSD preview vs forced recomposition', 'saved_psd_preview_vs_forced_layer_recomposition'),
+                  ('Forced recomposition vs extracted PNG overlay', 'forced_layer_recomposition_vs_extracted_png_overlay'),
+              ]:
+                  metric = split.get(key) or {}
+                  summary.append(f"- {field}, RGB MAE: `{metric.get('rgb_mae_255', 'unknown')}`")
+              summary.append(f"- Unresolved PSD preview/source conflict: `{split.get('source_reference_conflict_unresolved', 'unknown')}`")
+          path = os.getenv('GITHUB_STEP_SUMMARY')
+          if path:
+              with open(path, 'a', encoding='utf-8') as output:
+                  output.write('\n'.join(summary) + '\n')
+          print('ARTISTIC_VERDICT_SUMMARY', json.dumps({
+              'source_zip_sha256': source_hash,
+              'editor_import_verified': reports.get('editor', {}).get('editor_import_verified', False),
+              'color_status': reports.get('color', {}).get('status', 'NO_REPORT'),
+              'selected_rgb_candidate': reports.get('rgb_feedback', {}).get('selected_candidate', 'NONE'),
+              'feedback_rgb_gate': reports.get('rgb_feedback', {}).get('feedback_native_candidate_pass', False),
+              'full_artistic_approval': False,
+              'full_artifact_retained': 'NOT_YET_KNOWN',
+          }, sort_keys=True))
+          PY
+
+      - name: Stage selected RGB native 98-frame evidence for normal Actions artifact
+        # A recovered artifact quota must NOT silently omit the selected
+        # feedback_2 frames. This is the same trusted selection as Draft Release.
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, shutil, zipfile
+          from pathlib import Path
+          verdict=json.loads(Path('work/rgb-feedback/final-verdict.json').read_text())
+          selected=verdict['selected_candidate']
+          paths={
+              'initial': ('work/rgb-candidate/clgb71-rgb-candidate.zip',
+                          'work/rgb-editor','psd-editor-rgb-candidate-parity.json'),
+              'feedback': ('work/rgb-feedback/clgb71-feedback-candidate.zip',
+                           'work/rgb-feedback/editor','psd-editor-feedback-parity.json'),
+              'feedback_2': ('work/rgb-feedback-2/clgb71-feedback-candidate.zip',
+                             'work/rgb-feedback-2/editor','psd-editor-feedback-parity.json'),
+              'feedback_3': ('work/rgb-feedback-3/clgb71-feedback-candidate.zip',
+                             'work/rgb-feedback-3/editor','psd-editor-feedback-parity.json'),
+          }
+          assert selected in paths and verdict['artistic_quality_approved'] is False
+          assert verdict['release_ready'] is False
+          archive_path, editor_path, parity_name=paths[selected]
+          candidate=Path(archive_path)
+          editor=Path(editor_path)
+          report=editor/'editor-roundtrip-report.json'
+          native=json.loads(report.read_text())
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          assert native.get('source_archive_sha256')==digest
+          assert native.get('editor_import_verified') is True
+          assert native.get('roundtrip_spine_version')=='4.3.26'
+          assert native.get('slots')==38 and native.get('ik_constraints')==2
+          frames=list((editor/'screenshots').rglob('*.png'))
+          assert len(frames)==98
+          for clip in ('shoot_up_01','shoot_up_02'):
+              assert len(list((editor/'screenshots'/clip).glob('*.png')))==49
+          out=Path('work/selected-rgb')
+          shutil.copytree(editor/'screenshots',out/'screenshots')
+          shutil.copy2(report,out/'editor-roundtrip-report.json')
+          shutil.copy2(editor/parity_name,out/'psd-editor-parity.json')
+          native_zip=Path('work/editor/clgb71-selected-licensed-rgb-candidate.zip')
+          with zipfile.ZipFile(candidate) as src:
+              assert src.testzip() is None
+              names=src.namelist()
+              assert len(names)==len(set(names))
+              assert all(not name.startswith('/') and '..' not in Path(name).parts for name in names)
+              assert len([name for name in names if name.startswith('images/') and name.endswith('.png')])==38
+              additions={
+                  'clgb71-editor-4.3.26.spine':(editor/'clgb71-editor-4.3.26.spine').read_bytes(),
+                  'validation/licensed-selected-rgb-verdict.json':Path('work/rgb-feedback/final-verdict.json').read_bytes(),
+                  'validation/licensed-selected-rgb-parity.json':(editor/parity_name).read_bytes(),
+                  'validation/licensed-selected-editor-report.json':report.read_bytes(),
+              }
+              assert set(names).isdisjoint(additions)
+              with zipfile.ZipFile(native_zip,'w',zipfile.ZIP_DEFLATED,compresslevel=7) as target:
+                  for name in names:
+                      target.writestr(name,src.read(name))
+                  for name,contents in additions.items():
+                      target.writestr(name,contents)
+          with zipfile.ZipFile(native_zip) as proof:
+              assert proof.testzip() is None
+              assert len([x for x in proof.namelist() if x.startswith('images/') and x.endswith('.png')])==38
+          selection={
+              'selected_candidate':selected,
+              'source_psd_sha256':verdict['photoshop_reference_sha256'],
+              'selected_candidate_zip_sha256':digest,
+              'selected_native_zip_sha256':hashlib.sha256(native_zip.read_bytes()).hexdigest(),
+          }
+          (out/'selection.json').write_text(json.dumps(selection,sort_keys=True)+'\n')
+          print('SELECTED_NATIVE_RGB_STAGED',selected,len(frames),digest)
+          PY
+
+      - name: Pin every selected licensed Editor PNG byte before evidence publication
+        env:
+          NATIVE_RUN_ID: ${{ github.run_id }}
+          NATIVE_HEAD_SHA: ${{ env.THREESPINE_SHA }}
+        run: |
+          set -euo pipefail
+          python3 scripts/create_native_frame_manifest.py \
+            --frames work/selected-rgb/screenshots \
+            --manifest work/selected-rgb/selected-native-frame-sha256.json \
+            --run-id "$NATIVE_RUN_ID" --head-sha "$NATIVE_HEAD_SHA"
+          python3 scripts/create_native_frame_manifest.py \
+            --frames work/selected-rgb/screenshots \
+            --manifest work/selected-rgb/selected-native-frame-sha256.json --verify
+
+      - name: Publish results and failure diagnostics without exporting credentials
+        id: artifact_upload
+        if: false # Private PSD, Spine projects and native PNGs must never become public artifacts.
+        # Native evidence is stored only in the private 3Spine draft Release below.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: clgb71-licensed-spine-4-3-26-linux-evidence
+          if-no-files-found: warn
+          retention-days: 90
+          path: |
+            work/editor/clgb71-editor-4.3.26.spine
+            work/editor/clgb71-spine-4.3.26-native-verified.zip
+            work/editor/clgb71-selected-licensed-rgb-candidate.zip
+            work/editor/corrected-original-ik-spine-4.3.26.zip
+            work/editor/mesh-repair-report.json
+            work/editor/roundtrip-nonessential.export.json
+            work/editor/editor-roundtrip-report.json
+            work/editor/attachment-contact-report.json
+            work/editor/runtime-contact-poses.json
+            work/editor/contact_masks/
+            work/editor/visual-continuity-report.json
+            work/editor/native-aim-report.json
+            work/editor/render-anomaly-report.json
+            work/editor/psd-editor-color-evidence.json
+            work/editor/visual-review-side-by-side.png
+            work/editor/art-review/artistic-evidence-report.json
+            work/editor/art-review/artistic-review-contact-sheet.png
+            work/editor/art-review/human-art-review-template.json
+            work/editor/screenshots/
+            work/selected-rgb/
+            work/selected-rgb/selected-native-frame-sha256.json
+            work/rgb-candidate/ik-package-rgb-candidate-report.json
+            work/rgb-editor/editor-roundtrip-report.json
+            work/rgb-editor/psd-editor-rgb-candidate-parity.json
+            work/rgb-feedback/feedback-report.json
+            work/rgb-feedback/clgb71-feedback-candidate.zip
+            work/rgb-feedback/editor/clgb71-editor-4.3.26.spine
+            work/rgb-feedback/editor/editor-roundtrip-report.json
+            work/rgb-feedback/final-verdict.json
+            work/rgb-feedback/editor/psd-editor-feedback-parity.json
+            work/rgb-feedback/editor/screenshots/
+            work/rgb-editor/rgb-candidate-final-verdict.json
+            work/rgb-editor/rgb-candidate-render-anomaly.json
+            work/rgb-editor/rgb-candidate-motion-continuity.json
+            work/rgb-editor/screenshots/
+            work/fidelity/fidelity-report.json
+            work/fidelity/source-psd-compositing-profile.json
+            work/fidelity/psd-effect-footprints.json
+            work/fidelity/source-psd-color-resources.json
+            work/fidelity/source-psd-recomputed-from-layers.png
+            work/fidelity/source-psd-composite.png
+            work/fidelity/exported-layer-composite-approx.png
+            work/fidelity/source-vs-alpha-overlay-diff.png
+            work/fidelity/candidate-audit.json
+
+      - name: Save entire native evidence in PRIVATE draft Release when Actions artifacts quota blocks upload
+        id: private_draft_evidence
+        if: ${{ always() && steps.native_zip.outcome == 'success' && steps.artifact_upload.outcome != 'success' && ((github.event_name != 'pull_request' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
+        shell: bash
+        env:
+          # Existing CI credential is already used for cross-private-repo
+          # read access. GitHub's job token cannot create Releases under
+          # this private repository's enforced organisation policy (403).
+          # Never print this secret or put it into any ZIP or log file.
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+          GH_REPO: vladleopold/3Spine-core
+        run: |
+          set -euo pipefail
+          [[ -n "${GH_TOKEN:-}" ]] || {
+            echo '::error::Private draft evidence requires an authorized CI credential'
+            exit 1
+          }
+          # Fail closed: source PSD/Spine project and all PNGs must NEVER go
+          # into a public release, even when the public site is deployed.
+          [[ "$(gh api "repos/$GH_REPO" --jq .private)" == "true" ]] || {
+            echo '::error::Refusing to publish native evidence outside a private repository'
+            exit 1
+          }
+          export NATIVE_ZIP=work/editor/clgb71-spine-4.3.26-native-verified.zip
+          export ALL_FRAME_EVIDENCE=work/editor/clgb71-native-allframes-evidence.zip
+          export SELECTED_RGB_ZIP=work/editor/clgb71-selected-licensed-rgb-candidate.zip
+          python3 - <<'PY'
+          import hashlib,json,os,sys,zipfile
+          from pathlib import Path
+          original=Path(os.environ['NATIVE_ZIP'])
+          assert original.is_file() and original.stat().st_size>0
+          with zipfile.ZipFile(original) as archive:
+              assert archive.testzip() is None
+              members=archive.namelist()
+              assert len([x for x in members if x.startswith('images/') and x.endswith('.png')])==38
+              assert 'clgb71-editor-4.3.26.spine' in members
+              editor=json.loads(archive.read('validation/editor-roundtrip-report.json'))
+              art=json.loads(archive.read('validation/artistic-evidence-report.json'))
+              assert editor.get('editor_import_verified') is True
+              assert editor.get('artistic_quality_approved') is False
+              assert art.get('artistic_quality_approved') is False
+          rgb_verdict=json.loads(Path('work/rgb-feedback/final-verdict.json').read_text())
+          selected=rgb_verdict['selected_candidate']
+          assert selected in ('initial','feedback','feedback_2','feedback_3')
+          assert rgb_verdict['artistic_quality_approved'] is False and rgb_verdict['release_ready'] is False
+          if selected=='feedback_3':
+              assert rgb_verdict['feedback_round_three_pass'] is True
+              assert rgb_verdict['feedback_round_three_pixel_nonregression'] is True
+              candidate=Path('work/rgb-feedback-3/clgb71-feedback-candidate.zip')
+              editor=Path('work/rgb-feedback-3/editor')
+              parity=editor/'psd-editor-feedback-parity.json'
+          elif selected=='feedback_2':
+              assert rgb_verdict['feedback_round_two_pass'] is True
+              candidate=Path('work/rgb-feedback-2/clgb71-feedback-candidate.zip')
+              editor=Path('work/rgb-feedback-2/editor')
+              parity=editor/'psd-editor-feedback-parity.json'
+          elif selected=='feedback':
+              assert rgb_verdict['feedback_native_candidate_pass'] is True
+              candidate=Path('work/rgb-feedback/clgb71-feedback-candidate.zip')
+              editor=Path('work/rgb-feedback/editor')
+              parity=editor/'psd-editor-feedback-parity.json'
+          else:
+              assert rgb_verdict['first_native_candidate_pass'] is True
+              candidate=Path('work/rgb-candidate/clgb71-rgb-candidate.zip')
+              editor=Path('work/rgb-editor')
+              parity=editor/'psd-editor-rgb-candidate-parity.json'
+          native=editor/'clgb71-editor-4.3.26.spine'
+          native_report=editor/'editor-roundtrip-report.json'
+          verification=json.loads(native_report.read_text())
+          assert verification['editor_import_verified'] and verification['slots']==38 and verification['ik_constraints']==2
+          assert len(verification['official_rendered_frames'])>=98
+          selected_zip=Path(os.environ['SELECTED_RGB_ZIP'])
+          assert selected_zip.is_file(), 'Selected native ZIP must be staged before upload'
+          with zipfile.ZipFile(selected_zip) as proof:
+              assert proof.testzip() is None
+              assert len([name for name in proof.namelist() if name.startswith('images/') and name.endswith('.png')])==38
+          manifest=json.loads(Path('work/selected-rgb/selection.json').read_text())
+          assert manifest['selected_candidate']==selected
+          assert manifest['selected_native_zip_sha256']==hashlib.sha256(selected_zip.read_bytes()).hexdigest()
+          print('PRIVATE_SELECTED_RGB_NATIVE',selected,hashlib.sha256(selected_zip.read_bytes()).hexdigest())
+          screenshots=Path('work/editor/screenshots')
+          frames=sorted(screenshots.rglob('*.png'))
+          assert len(frames)>=98,'All native frames must be present before a draft can be saved'
+          evidence=Path(os.environ['ALL_FRAME_EVIDENCE'])
+          extras=[
+              Path('work/editor/art-review/artistic-evidence-report.json'),
+              Path('work/editor/art-review/artistic-review-contact-sheet.png'),
+              Path('work/editor/visual-continuity-report.json'),
+              Path('work/editor/native-aim-report.json'),
+              Path('work/editor/render-anomaly-report.json'),
+              Path('work/fidelity/fidelity-report.json'),
+              Path('work/fidelity/psd-effect-footprints.json'),
+              Path('work/editor/editor-roundtrip-report.json')]
+          # The corrected candidate is never published as original. Preserve
+          # it only in this PRIVATE draft under a separate rgb-editor/ path.
+          rgb_root=Path('work/rgb-editor')
+          rgb_frames=sorted((rgb_root/'screenshots').rglob('*.png'))
+          initial_rgb_verdict_file=rgb_root/'rgb-candidate-final-verdict.json'
+          if initial_rgb_verdict_file.is_file():
+              verdict=json.loads(initial_rgb_verdict_file.read_text())
+              assert verdict.get('real_licensed_spine_editor_4_3_26') is True
+              assert verdict.get('artistic_quality_approved') is False
+              assert verdict.get('release_ready') is False
+              assert len(rgb_frames)>=98
+              extras += [
+                  rgb_root/'editor-roundtrip-report.json',
+                  rgb_root/'psd-editor-rgb-candidate-parity.json',
+                  rgb_root/'rgb-candidate-final-verdict.json',
+                  rgb_root/'rgb-candidate-render-anomaly.json',
+                  rgb_root/'rgb-candidate-motion-continuity.json']
+          selected_frames=sorted(Path('work/rgb-feedback/editor/screenshots').rglob('*.png'))
+          assert len(selected_frames)>=98
+          # The first-feedback render can differ from the selected feedback_2
+          # candidate. Archive the actual selected, licensed 98 PNGs separately.
+          selected_native_frames=sorted((editor/'screenshots').rglob('*.png'))
+          assert len(selected_native_frames)==98, 'Selected RGB native candidate needs 98 PNGs'
+          for clip in ('shoot_up_01','shoot_up_02'):
+              assert len([f for f in selected_native_frames if f.parent.name==clip])==49
+          extras += [Path('work/rgb-feedback/final-verdict.json'),
+                     Path('work/rgb-feedback/editor/psd-editor-feedback-parity.json'),
+                     Path('work/rgb-feedback/editor/editor-roundtrip-report.json')]
+          with zipfile.ZipFile(evidence,'w',zipfile.ZIP_DEFLATED,compresslevel=6,allowZip64=True) as archive:
+              for file in [*frames,*rgb_frames,*selected_frames,*extras]:
+                  assert file.is_file() and not file.is_symlink()
+                  archive.write(file,arcname=file.as_posix().replace('work/','',1))
+              for file in selected_native_frames:
+                  assert file.is_file() and not file.is_symlink()
+                  archive.write(file,'selected-rgb/screenshots/'+file.relative_to(editor/'screenshots').as_posix())
+              archive.writestr('selected-rgb/selection.json',json.dumps({
+                  'selected_candidate':selected,
+                  'source_psd_sha256':rgb_verdict['photoshop_reference_sha256'],
+                  'selected_candidate_zip_sha256':hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                  'selected_native_zip_sha256':hashlib.sha256(selected_zip.read_bytes()).hexdigest(),
+              },sort_keys=True))
+              archive.write(native_report,'selected-rgb/editor-roundtrip-report.json')
+              archive.write(parity,'selected-rgb/psd-editor-parity.json')
+              archive.write(Path('work/selected-rgb/selected-native-frame-sha256.json'),
+                            'selected-rgb/selected-native-frame-sha256.json')
+          with zipfile.ZipFile(evidence) as archive:
+              assert archive.testzip() is None
+              assert len([x for x in archive.namelist() if x.startswith('editor/screenshots/') and x.endswith('.png')])==len(frames)
+              assert len([x for x in archive.namelist() if x.startswith('selected-rgb/screenshots/') and x.endswith('.png')])==98
+              assert len(archive.namelist())==len(set(archive.namelist()))
+          assert evidence.stat().st_size<2*1024**3,'GitHub Release assets have a 2 GiB per-file limit'
+          for file in (original,evidence,selected_zip):
+              digest=hashlib.file_digest(open(file,'rb'),'sha256').hexdigest()
+              print('PRIVATE_NATIVE_DRAFT_ASSET_SHA256',file,digest)
+          print('NATIVE_UNAPPROVED_FRAME_COUNT',len(frames))
+          PY
+          TAG="evidence/clgb71/${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
+          cat > "$RUNNER_TEMP/clgb71-native-evidence-notes.txt" <<EOF
+          PRIVATE TECHNICAL EVIDENCE ONLY — NOT AN ARTISTIC OR PUBLIC RELEASE.
+
+          Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          3Spine source commit: $THREESPINE_SHA
+          Original source repository: ${SOURCE_REPO:-unknown}
+          Original source ZIP run: ${SOURCE_RUN_SELECTED:-unknown}
+          Original source ZIP artifact: ${SOURCE_ARTIFACT_ID:-unknown}
+
+          Spine Editor 4.3.26 native import and frame evidence.
+          38 source PNG layers preserved. Separate licensed Editor RGB-matched ZIP included. Art review NOT APPROVED.
+          Both archives have a SHA-256 digest in the linked Actions job log.
+          EOF
+          gh release create "$TAG" \
+            "$NATIVE_ZIP" "$ALL_FRAME_EVIDENCE" "$SELECTED_RGB_ZIP" \
+            --draft --latest=false --target "$GITHUB_SHA" \
+            --title "Private unapproved clgb71 native evidence run $GITHUB_RUN_ID" \
+            --notes-file "$RUNNER_TEMP/clgb71-native-evidence-notes.txt"
+          gh release view "$TAG" --repo "$GH_REPO" --json isDraft,tagName,assets > "$RUNNER_TEMP/private-release-view.json"
+          jq -e --arg tag "$TAG" \
+            --arg native "$(basename "$NATIVE_ZIP")" \
+            --arg frames "$(basename "$ALL_FRAME_EVIDENCE")" \
+            --arg selected "$(basename "$SELECTED_RGB_ZIP")" \
+            ".isDraft == true and .tagName == \$tag and
+             ([.assets[].name] | index(\$native) != null and index(\$frames) != null and index(\$selected) != null)" \
+            "$RUNNER_TEMP/private-release-view.json"
+          echo "PRIVATE_DRAFT_NATIVE_EVIDENCE_STORED $TAG"
+          {
+            echo '### Native evidence stored privately after Actions artifact quota refusal'
+            printf 'Draft tag: %s (private repository only)\n' "$TAG"
+            echo 'Technical import was verified; artistic approval remains **false**.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail closed if a PR cannot retain its native evidence
+        if: ${{ always() && steps.artifact_upload.outcome == 'failure' && github.event_name == 'pull_request' && steps.private_draft_evidence.outcome != 'success' }}
+        shell: bash
+        run: |
+          echo '::error::PR native evidence could not be retained; never approve without artifacts'
+          exit 1
+
+      - name: Deactivate licensed Editor for this ephemeral runner
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${SPINE_CLI:-}" ] && [ -x "$SPINE_CLI" ]; then
+            timeout 180 xvfb-run -a "$SPINE_CLI" -l >/dev/null 2>&1 || true
+          fi
