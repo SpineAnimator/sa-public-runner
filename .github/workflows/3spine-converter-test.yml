@@ -7,7 +7,14 @@ jobs:
       contents: read
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
+          persist-credentials: false
       - name: Validate isolated spine archive runner configuration
         shell: bash
         run: |
@@ -20,8 +27,18 @@ jobs:
   backend-container:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: 3spine
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
+          persist-credentials: false
 
       - name: Build backend image (Linux)
         run: docker build -t spine-backend:ci ./backend
@@ -60,9 +77,19 @@ jobs:
   linux-e2e:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: 3spine
     needs: backend-container
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
+          persist-credentials: false
 
       - name: Native converter executes on Linux via Docker
         run: |
