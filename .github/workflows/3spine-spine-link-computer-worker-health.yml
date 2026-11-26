@@ -4,6 +4,9 @@ on:
     secrets:
       SPINE_LINUX_URL:
         required: false
+    secrets:
+      SPINE_LINUX_URL:
+        required: false
 permissions:
   contents: read
 jobs:
