@@ -21,9 +21,19 @@ concurrency:
 jobs:
   api-security-and-zip-regression:
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: 3spine
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
+          persist-credentials: false
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -64,9 +74,12 @@ jobs:
           echo 'SPINE_MASK_V2_OFFLINE_CONTRACT_PASS'
 
   licensed-ubuntu-api-roundtrip:
-    if: inputs.run-editor-roundtrip && github.event_name != 'pull_request' && github.repository == 'vladleopold/3Spine-core'
+    if: inputs.run-editor-roundtrip && github.event_name != 'pull_request' && github.repository == 'SpineAnimator/2Spine-visual-audit'
     needs: api-security-and-zip-regression
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: 3spine
     timeout-minutes: 35
     env:
       SPINE_MASK_GATEWAY: https://spine-mask-native-gateway.vladyslavchaplygin.workers.dev
@@ -76,7 +89,14 @@ jobs:
       LIBGL_ALWAYS_SOFTWARE: '1'
       GALLIUM_DRIVER: llvmpipe
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
+          persist-credentials: false
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
