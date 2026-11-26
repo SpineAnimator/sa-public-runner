@@ -102,12 +102,17 @@ jobs:
                           path.as_posix() == ".github/workflows/build-mask-bridge.yml"
                           and value in {"windows-latest", "macos-latest"}
                       )
+                      bridge_matrix = (
+                          path.as_posix() == ".github/workflows/spine-mask-bridge-platform-tests.yml"
+                          and value == "${{ matrix.os }}"
+                          and "os: [ubuntu-24.04, windows-latest, macos-latest]" in text
+                      )
                       legacy_macos = (
                           value == "macos-latest"
                           and path.name == "2spine-private-ci.yml"
                           and "  macos-app:" in text
                       )
-                      if value not in allowed and not bridge_platform and not legacy_macos:
+                      if value not in allowed and not bridge_platform and not bridge_matrix and not legacy_macos:
                           failures.append(f"{path}:{number}: runs-on={value!r}; allowed={sorted(allowed)} plus OS-specific public Bridge builders")
           print(f"WORKFLOW_RUNNER_JOBS_SCANNED={total}")
           print("APPROVED_EXECUTION_REPOSITORIES=" + ",".join(str(p) for p in roots))
