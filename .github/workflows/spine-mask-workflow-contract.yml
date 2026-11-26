@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/*.yml'
+      - 'tests/test_bridge_public_executor_contract.py'
   workflow_dispatch:
 permissions:
   contents: read
