@@ -4,9 +4,6 @@ on:
     secrets:
       SOURCE_REPO_TOKEN:
         required: false
-    secrets:
-      SOURCE_REPO_TOKEN:
-        required: true
     inputs:
       source_run_id:
         description: Exact successful main-branch licensed Editor run ID to audit
