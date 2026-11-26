@@ -27,14 +27,7 @@ jobs:
             exit 1
           }
           askpass="$RUNNER_TEMP/source-repo-askpass.sh"
-          cat > "$askpass" <<'ASKPASS'
-          #!/usr/bin/env bash
-          case "$1" in
-            *Username*) echo 'x-access-token' ;;
-            *Password*) printf '%s' "$GH_TOKEN" ;;
-            *) exit 1 ;;
-          esac
-          ASKPASS
+          printf '%s\n' '#!/usr/bin/env bash' 'case "$1" in' '  *Username*) echo x-access-token ;;' '  *Password*) printf "%s" "$GH_TOKEN" ;;' '  *) exit 1 ;;' 'esac' > "$askpass"
           chmod 700 "$askpass"
           export GIT_ASKPASS="$askpass"
           export GIT_TERMINAL_PROMPT=0
