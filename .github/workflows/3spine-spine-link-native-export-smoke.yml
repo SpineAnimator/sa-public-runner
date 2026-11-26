@@ -8,17 +8,6 @@ on:
         required: false
       SPINE_LINUX_URL:
         required: false
-    secrets:
-      SOURCE_REPO_TOKEN:
-        required: true
-      SPINE_LICENSE:
-        required: false
-      SPINE_LINUX_URL:
-        required: false
-permissions:
-  contents: read
-jobs:
-  official-project:
     runs-on: ubuntu-24.04
     timeout-minutes: 22
     defaults:
