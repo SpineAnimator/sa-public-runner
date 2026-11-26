@@ -103,7 +103,7 @@ jobs:
         env:
           URL: ${{ matrix.url }}
           OUTPUT_DIR: ./artifacts
-        run: node scripts/spine-pack.mjs
+        run: node scripts/spine-pack.mjs "$OUTPUT_DIR" "$OUTPUT_DIR"
       - name: Generate per-site report when the reporter exists
         if: ${{ hashFiles('scripts/report.mjs') != '' }}
         env:
@@ -159,19 +159,30 @@ jobs:
               except Exception:
                   continue
               found[data.get('url')] = (int(data.get('files') or 0), int(data.get('spine') or 0))
-          total_files = total_spine = passed = 0
+          total_files = total_spine = with_assets = 0
+          missing_reports = []
+          empty_sites = []
           print('## Saver self-test — seven reference URLs\\n')
-          print('| Site | Files | Spine pairs | Report |')
+          print('| Site | Files | Spine pairs | Result |')
           print('| --- | ---: | ---: | :---: |')
           for name, url in rows:
               result = found.get(url)
               if result is None:
-                  print('| %s | — | — | ❌ |' % name)
+                  missing_reports.append(name)
+                  print('| %s | — | — | ❌ missing report |' % name)
                   continue
               files, spine = result
+              if files <= 0:
+                  empty_sites.append(name)
+                  print('| %s | 0 | %d | ⚠ empty capture |' % (name, spine))
+                  continue
               total_files += files
               total_spine += spine
-              passed += 1
-              print('| %s | %d | %d | ✅ |' % (name, files, spine))
-          print('| **Total** | **%d** | **%d** | **%d/7** |' % (total_files, total_spine, passed))
+              with_assets += 1
+              print('| %s | %d | %d | ✅ captured |' % (name, files, spine))
+          print('| **Total with assets** | **%d** | **%d** | **%d/7** |' % (total_files, total_spine, with_assets))
+          if missing_reports:
+              print('\\nMissing reports: %s' % ', '.join(missing_reports))
+          if empty_sites:
+              print('\\nPages with no captured resources (likely anti-bot/empty content): %s' % ', '.join(empty_sites))
           PY
