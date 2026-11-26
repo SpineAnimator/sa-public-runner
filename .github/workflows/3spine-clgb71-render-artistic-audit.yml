@@ -70,7 +70,7 @@ jobs:
             echo "::error::Unexpected event for main-branch native evidence"
             exit 1
           }
-          COMPARE="$(gh api "repos/$GITHUB_REPOSITORY/compare/$HEAD_SHA...main")"
+          COMPARE="$(gh api "repos/$SOURCE_REPOSITORY/compare/$HEAD_SHA...main")"
           printf '%s' "$COMPARE" | jq -e '.status == "ahead" or .status == "identical"' >/dev/null || {
             echo "::error::Native run SHA is not an ancestor of current main; provenance is unverified"
             exit 1
@@ -105,7 +105,7 @@ jobs:
             .conclusion == "success" and
             (.path | endswith("/verify-clgb71-editor-linux.yml"))
           ' >/dev/null
-          if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq 'clgb71-licensed-spine-4-3-26-linux-evidence'; then
+          if gh api "repos/$SOURCE_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq 'clgb71-licensed-spine-4-3-26-linux-evidence'; then
             gh run download "$RUN_ID" -R "$SOURCE_REPOSITORY" -n clgb71-licensed-spine-4-3-26-linux-evidence -D evidence
           else
             TAG="evidence/clgb71/${RUN_ID}-attempt-${EXPECTED_ATTEMPT}"
