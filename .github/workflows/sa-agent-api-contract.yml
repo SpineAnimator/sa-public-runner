@@ -1,0 +1,20 @@
+name: Spine-Resize SA agent API contract on public Ubuntu
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check production bundle syntax
+        run: node --check app.js
+      - name: Verify SA browser API
+        run: node tools/sa-agent-api-contract.mjs
