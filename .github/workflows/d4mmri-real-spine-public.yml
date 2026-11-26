@@ -9,7 +9,6 @@ permissions:
   contents: read
   actions: read
 
-  contents: write
 jobs:
   generate:
     runs-on: ubuntu-24.04
