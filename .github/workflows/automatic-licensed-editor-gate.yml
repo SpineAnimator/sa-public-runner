@@ -1,0 +1,55 @@
+name: Automatic licensed Spine Editor readiness and native gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/automatic-licensed-editor-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: automatic-licensed-editor-readiness
+  cancel-in-progress: false
+jobs:
+  readiness:
+    name: Check licensed Editor credentials without exposing values
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      ready: ${{ steps.probe.outputs.ready }}
+    steps:
+      - name: Probe required secrets safely
+        id: probe
+        shell: bash
+        env:
+          SOURCE_REPO_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+          SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
+          SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for key in SOURCE_REPO_TOKEN SPINE_LICENSE SPINE_LINUX_URL; do
+            if [ -z "${!key}" ]; then missing+=("$key"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "## Licensed Editor readiness" >> "$GITHUB_STEP_SUMMARY"
+            echo "Waiting for required repository secrets: ${missing[*]}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "## Licensed Editor readiness" >> "$GITHUB_STEP_SUMMARY"
+          echo "All required credentials are configured; starting the native public Ubuntu gate." >> "$GITHUB_STEP_SUMMARY"
+  native-editor:
+    name: Licensed CLGB71 import/export on public Ubuntu 24.04
+    needs: readiness
+    if: needs.readiness.outputs.ready == 'true'
+    uses: ./.github/workflows/3spine-clgb71-licensed-editor.yml
+    with:
+      artifact_run_id: ''
+      expected_source_sha: ''
+    secrets:
+      SOURCE_REPO_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+      SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
+      SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
