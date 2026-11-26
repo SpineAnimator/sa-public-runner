@@ -28,7 +28,7 @@ jobs:
           test "${#workflows[@]}" -gt 0
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 "${workflows[@]}"
           for workflow in "${workflows[@]}"; do
-            if grep -Eq 'runs-on:.*self-hosted' "$workflow"; then
+            if grep -Eq '^[[:space:]]*runs-on:[[:space:]]*\\[?self-hosted' "$workflow"; then
               echo "::error::Private runner label found in $workflow"
               exit 1
             fi
