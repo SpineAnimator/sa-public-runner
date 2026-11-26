@@ -69,7 +69,7 @@ jobs:
               Path("repos/spine-scripts"),
               Path("repos/Spine-Link-project-export"),
           ]
-          allowed = {"ubuntu-latest", "ubuntu-22.04", "ubuntu-24.04"}
+          allowed = {"ubuntu-latest", "ubuntu-22.04", "ubuntu-24.04", "ubuntu-slim"}
           failures = []
           total = 0
           for root in roots:
