@@ -1,6 +1,13 @@
 name: Public Ubuntu executor | spine link native export smoke
 on:
   workflow_call:
+    secrets:
+      SOURCE_REPO_TOKEN:
+        required: false
+      SPINE_LICENSE:
+        required: false
+      SPINE_LINUX_URL:
+        required: false
 permissions:
   contents: read
 jobs:
