@@ -27,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -n 'allowed_origins.*\\*' spine-bridge/install_spinemask_host.py; then
+          if grep -n 'allowed_origins.*[*]' spine-bridge/install_spinemask_host.py; then
             echo "::error::Wildcard Native Messaging origins are forbidden"
             exit 1
           fi
