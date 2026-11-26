@@ -1,0 +1,49 @@
+name: Spine Mask screenshot private delivery encode on public Ubuntu
+on:
+  workflow_call:
+    secrets:
+      SOURCE_REPO_TOKEN:
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  encode:
+    name: Re-encode native Editor screenshot in private repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+      GH_REPO: vladleopold/3Spine-core
+    steps:
+      - name: Verify public Ubuntu runner
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = Linux
+          grep -q 'Ubuntu 24.04' /etc/os-release
+      - name: Re-encode existing real native Editor screenshot as private transport blob
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'vladleopold/3Spine-core'
+          umask 077
+          mkdir -p "$RUNNER_TEMP/private"
+          gh api "repos/$GH_REPO/git/blobs/532b885d363a9ecbc540faecbff84ba68e37d9ea" --jq '.content' \
+            | tr -d '\n' | base64 -d | base64 -d > "$RUNNER_TEMP/private/source.png"
+          python3 -m pip -q install pillow
+          python3 - <<'PY'
+          from PIL import Image
+          import os,json,base64
+          d=os.environ['RUNNER_TEMP']+'/private'
+          im=Image.open(d+'/source.png')
+          assert im.size==(933,700)
+          im.convert('RGB').resize((800,600)).save(d+'/editor.webp',format='WEBP',quality=72,method=6)
+          size=os.path.getsize(d+'/editor.webp')
+          assert 5000<size<100000
+          with open(d+'/editor.webp','rb') as f: content=base64.b64encode(f.read()).decode()
+          with open(d+'/payload.json','w') as f:json.dump({'content':content,'encoding':'utf-8'},f)
+          print('PRIVATE_SCREENSHOT_TRANSPORT_BYTES',size)
+          PY
+          SHA="$(gh api -X POST "repos/$GH_REPO/git/blobs" --input "$RUNNER_TEMP/private/payload.json" --jq .sha)"
+          echo "PRIVATE_SCREENSHOT_WEBP_B64_SHA=$SHA"
+          rm -rf "$RUNNER_TEMP/private"
