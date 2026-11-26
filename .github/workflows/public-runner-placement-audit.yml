@@ -1,4 +1,5 @@
 name: Public runner placement audit (five approved repositories)
+# Only GitHub-hosted runners are allowed; private/self-hosted execution is prohibited.
 
 on:
   push:
