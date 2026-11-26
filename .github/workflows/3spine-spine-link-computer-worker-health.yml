@@ -1,6 +1,9 @@
 name: Public Ubuntu executor | Spine Link Computer Editor health
 on:
   workflow_call:
+    secrets:
+      SPINE_LINUX_URL:
+        required: false
 permissions:
   contents: read
 jobs:
