@@ -3,7 +3,11 @@ on:
   workflow_call:
     secrets:
       SOURCE_REPO_TOKEN:
-        required: false
+        required: true
+permissions:
+  contents: read
+jobs:
+  site-to-licensed-editor:
     runs-on: ubuntu-24.04
     defaults:
       run:
