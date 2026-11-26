@@ -10,11 +10,11 @@ on:
         required: false
     secrets:
       ACCESS_TOKEN:
-        required: true
+        required: false
       SPINE_LICENSE:
-        required: true
+        required: false
       SPINE_LINUX_URL:
-        required: true
+        required: false
 permissions:
   contents: read
 jobs:
