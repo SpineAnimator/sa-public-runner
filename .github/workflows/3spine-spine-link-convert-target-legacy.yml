@@ -1,6 +1,13 @@
 name: Public Ubuntu executor | spine link convert target legacy
 on:
   workflow_call:
+    secrets:
+      ACCESS_TOKEN:
+        required: true
+      SPINE_LICENSE:
+        required: true
+      SPINE_LINUX_URL:
+        required: true
 permissions:
   contents: read
 jobs:
