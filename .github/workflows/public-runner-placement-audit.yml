@@ -1,4 +1,4 @@
-name: Public runner placement audit (six approved repositories)
+name: Public runner placement audit (all approved product repositories)
 # Only GitHub-hosted runners are allowed; private/self-hosted execution is prohibited.
 
 on:
@@ -6,9 +6,13 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/**'
+      - 'scripts/audit_public_runners.py'
+      - 'tests/test_public_runner_audit_coverage.py'
   pull_request:
     paths:
       - '.github/workflows/**'
+      - 'scripts/audit_public_runners.py'
+      - 'tests/test_public_runner_audit_coverage.py'
   workflow_dispatch:
   schedule:
     - cron: '17 */6 * * *'
@@ -61,68 +65,23 @@ jobs:
           ref: main
           path: repos/spine-link-computer
           persist-credentials: false
-      - name: Enforce GitHub-hosted Ubuntu runners in all approved repositories
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import re, sys
-
-          roots = [
-              Path("."),
-              Path("repos/sa-psd-tool-runner"),
-              Path("repos/2Spine-visual-audit"),
-              Path("repos/spine-scripts"),
-              Path("repos/Spine-Link-project-export"),
-              Path("repos/spine-link-computer"),
-          ]
-          allowed = {"ubuntu-latest", "ubuntu-22.04", "ubuntu-24.04", "ubuntu-slim"}
-          failures = []
-          total = 0
-          for root in roots:
-              workflow_dir = root / ".github" / "workflows"
-              if not workflow_dir.is_dir():
-                  if root.name == "spine-scripts":
-                      print(f"{root}: no workflow directory; no Action jobs to migrate")
-                      continue
-                  failures.append(f"{root}: missing .github/workflows")
-                  continue
-              for path in sorted(workflow_dir.rglob("*")):
-                  if path.suffix not in {".yml", ".yaml"}:
-                      continue
-                  text = path.read_text(encoding="utf-8")
-                  for number, line in enumerate(text.splitlines(), 1):
-                      match = re.match(r"^\s*runs-on:\s*(.*?)\s*$", line)
-                      if not match:
-                          continue
-                      total += 1
-                      value = match.group(1).strip().strip(chr(34)).strip(chr(39))
-                      bridge_platform = (
-                          path.name in {"build-mask-bridge.yml", "spine-mask-bridge-platform-tests.yml"}
-                          and value in {"windows-latest", "macos-latest"}
-                      )
-                      bridge_matrix = (
-                          value.replace(" ", "") == "${{matrix.os}}"
-                          and "os: [ubuntu-24.04, windows-latest, macos-latest]" in text
-                      )
-                      legacy_macos = (
-                          value == "macos-latest"
-                          and path.name == "2spine-private-ci.yml"
-                          and "  macos-app:" in text
-                      )
-                      if value not in allowed and not bridge_platform and not bridge_matrix and not legacy_macos:
-                          failures.append(f"{path}:{number}: runs-on={value!r}; allowed={sorted(allowed)} plus OS-specific public Bridge builders")
-          print(f"WORKFLOW_RUNNER_JOBS_SCANNED={total}")
-          print("APPROVED_EXECUTION_REPOSITORIES=" + ",".join(str(p) for p in roots))
-          if failures:
-              print("\n".join(failures), file=sys.stderr)
-              sys.exit(1)
-          if total == 0:
-              raise SystemExit("No workflow jobs with explicit runs-on were found")
-          print("PUBLIC_UBUNTU_RUNNER_POLICY_PASS")
-          PY
-      - name: Lint runner audit and Spine Link reusable workflow
+      - uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/Spine-Resize
+          ref: main
+          path: repos/Spine-Resize
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/spine-web-source
+          ref: main
+          path: repos/spine-web-source
+          persist-credentials: false
+      - name: Test runner audit scope and platform allowlist
+        run: python3 -m unittest discover -s tests -p 'test_public_runner_audit_coverage.py' -v
+      - name: Enforce public GitHub-hosted runner policy across all repositories
+        run: python3 scripts/audit_public_runners.py
+      - name: Lint runner audit and Spine Link reusable workflows
         run: |
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
             .github/workflows/public-runner-placement-audit.yml \
