@@ -1,0 +1,224 @@
+name: Public Ubuntu executor | clgb71 render artistic audit
+on:
+  workflow_call:
+    inputs:
+      source_run_id:
+        description: Exact successful main-branch licensed Editor run ID to audit
+        required: false
+        type: string
+        default: ''
+permissions:
+  contents: read
+  actions: read
+jobs:
+  # Python unit suites run on the public Ubuntu validation harness because this
+  # private repository has no hosted-runner allocation. Keep only licensed native
+  # evidence review here; it must execute on the configured 3Spine Ubuntu runner.
+  review-real-spine-frames:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.head_branch == 'main') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Choose an actual successful licensed Editor workflow run
+        id: native
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_RUN_ID: ${{ inputs.source_run_id }}
+          EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          RUN_ID="${REQUESTED_RUN_ID:-${EVENT_RUN_ID:-}}"
+          [[ "$RUN_ID" =~ ^[0-9]{8,20}$ ]] || {
+            echo '::error::No exact native Editor run ID; stale-success fallback is forbidden'
+            exit 1
+          }
+          META="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/$RUN_ID")"
+          printf '%s' "$META" | jq -e --arg repo "$GITHUB_REPOSITORY" --argjson run_id "$RUN_ID" '
+            .id == $run_id and
+            .repository.full_name == $repo and
+            .head_repository.full_name == $repo and
+            .conclusion == "success" and
+            .run_attempt >= 1 and
+            (.head_sha | test("^[0-9a-f]{40}$")) and
+            (.path | endswith("/verify-clgb71-editor-linux.yml"))
+          ' >/dev/null || {
+            echo "::error::Native run lacks trusted repository, SHA, attempt or workflow provenance"
+            exit 1
+          }
+          HEAD_SHA="$(printf '%s' "$META" | jq -er '.head_sha')"
+          ATTEMPT="$(printf '%s' "$META" | jq -er '.run_attempt')"
+          HEAD_BRANCH="$(printf '%s' "$META" | jq -er '.head_branch')"
+          EVENT="$(printf '%s' "$META" | jq -er '.event')"
+          [[ "$HEAD_BRANCH" == "main" ]] || {
+            echo "::error::Only successful main-branch licensed Editor runs may be audited"
+            exit 1
+          }
+          [[ "$EVENT" == "schedule" || "$EVENT" == "push" || "$EVENT" == "workflow_dispatch" ]] || {
+            echo "::error::Unexpected event for main-branch native evidence"
+            exit 1
+          }
+          COMPARE="$(gh api "repos/$GITHUB_REPOSITORY/compare/$HEAD_SHA...main")"
+          printf '%s' "$COMPARE" | jq -e '.status == "ahead" or .status == "identical"' >/dev/null || {
+            echo "::error::Native run SHA is not an ancestor of current main; provenance is unverified"
+            exit 1
+          }
+          PROVENANCE="main-ancestor"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "head_branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "run_attempt=$ATTEMPT" >> "$GITHUB_OUTPUT"
+          echo "trusted_main_provenance=$PROVENANCE" >> "$GITHUB_OUTPUT"
+      - name: Restore real Editor evidence from Actions artifact or private draft Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          RUN_ID: ${{ steps.native.outputs.run_id }}
+          EXPECTED_HEAD_SHA: ${{ steps.native.outputs.head_sha }}
+          EXPECTED_HEAD_BRANCH: ${{ steps.native.outputs.head_branch }}
+          EXPECTED_ATTEMPT: ${{ steps.native.outputs.run_attempt }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          # Trust-check the exact branch run, commit and attempt selected above.
+          META="$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}")"
+          printf '%s' "$META" | jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXPECTED_HEAD_SHA" --arg branch "$EXPECTED_HEAD_BRANCH" --argjson attempt "$EXPECTED_ATTEMPT" '
+            .repository.full_name == $repo and
+            .head_repository.full_name == $repo and
+            .head_branch == $branch and
+            .head_sha == $sha and
+            .run_attempt == $attempt and
+            .conclusion == "success" and
+            (.path | endswith("/verify-clgb71-editor-linux.yml"))
+          ' >/dev/null
+          if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq 'clgb71-licensed-spine-4-3-26-linux-evidence'; then
+            gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n clgb71-licensed-spine-4-3-26-linux-evidence -D evidence
+          else
+            TAG="evidence/clgb71/${RUN_ID}-attempt-${EXPECTED_ATTEMPT}"
+            gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json isDraft,assets --jq '
+              .isDraft == true and
+              ([.assets[].name] | index("clgb71-native-allframes-evidence.zip") != null and
+               index("clgb71-selected-licensed-rgb-candidate.zip") != null)' | grep -Fxq true
+            gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p clgb71-native-allframes-evidence.zip -D evidence
+            gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p clgb71-selected-licensed-rgb-candidate.zip -D evidence
+            python - <<'PYZIP'
+          import stat, zipfile
+          from pathlib import Path
+          z=Path('evidence/clgb71-native-allframes-evidence.zip')
+          with zipfile.ZipFile(z) as archive:
+              names=archive.namelist()
+              assert archive.testzip() is None
+              assert len(names)==len(set(names))
+              assert all(not n.startswith('/') and '..' not in Path(n).parts and
+                         ((i.external_attr>>16)&0o170000)!=stat.S_IFLNK
+                         for n,i in ((x.filename,x) for x in archive.infolist()))
+              assert len([n for n in names if n.startswith('editor/screenshots/') and n.endswith('.png')]) >= 98
+              archive.extractall('evidence')
+          PYZIP
+          fi
+          # Older artifact upload layouts may retain the common work/ prefix.
+          # Normalize only this known path; reject ambiguous duplicate trees.
+          if [[ -d evidence/work/selected-rgb ]]; then
+            if [[ -e evidence/selected-rgb ]]; then
+              echo '::error::Ambiguous selected-RGB evidence roots'
+              exit 1
+            fi
+            mv evidence/work/selected-rgb evidence/selected-rgb
+          fi
+          test -s evidence/selected-rgb/selection.json || {
+            echo "::error::Exact native run $RUN_ID attempt $EXPECTED_ATTEMPT has no selected-rgb/selection.json; refusing stale fallback"
+            exit 1
+          }
+          test -s evidence/selected-rgb/selected-native-frame-sha256.json || {
+            echo "::error::Exact native run $RUN_ID lacks selected frame SHA-256 manifest"
+            exit 1
+          }
+          test -s evidence/editor/editor-roundtrip-report.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'Pillow>=10.3,<14'
+      - name: Require Editor roundtrip evidence, never trust screenshots alone
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('evidence/editor/editor-roundtrip-report.json')
+          r=json.loads(p.read_text())
+          assert r.get('editor_import_verified') is True
+          assert r.get('native_spine_project_verified') is True
+          assert r.get('roundtrip_spine_version') == '4.3.26'
+          assert r.get('slots') == 38
+          assert r.get('ik_constraints') == 2
+          assert r.get('animations') == ['shoot_up_01','shoot_up_02']
+          assert r.get('spine_render_nonblank_frames_verified') is True
+          assert r.get('artistic_quality_approved') is False
+          print('REAL_EDITOR_EVIDENCE_CONFIRMED')
+          PY
+      - name: Confirm exact PSD, source ZIP and selected licensed RGB candidate evidence
+        run: |
+          python scripts/verify_selected_rgb_native_evidence.py \
+            --evidence-dir evidence \
+            --report evidence/selected-native-evidence-report.json
+      - name: Verify all 98 selected native PNG bytes and exact source-run provenance
+        env:
+          RUN_ID: ${{ steps.native.outputs.run_id }}
+          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          META="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/$RUN_ID")"
+          EXPECTED_HEAD_SHA="${{ steps.native.outputs.head_sha }}"
+          jq -e --argjson run_id "$RUN_ID" --arg head_sha "$EXPECTED_HEAD_SHA" '
+            .native_run_id == $run_id and .native_head_sha == $head_sha
+          ' evidence/selected-rgb/selected-native-frame-sha256.json >/dev/null
+          python scripts/create_native_frame_manifest.py \
+            --frames evidence/selected-rgb/screenshots \
+            --manifest evidence/selected-rgb/selected-native-frame-sha256.json --verify
+      - name: Detect cyan eruptions and duplicate motion in original 98 native frames
+        run: |
+          python scripts/audit_clgb71_spine_render.py \
+            --frames-dir evidence/editor/screenshots \
+            --report evidence/render-anomaly-report.json
+      - name: Independently audit selected RGB candidate's 98 licensed native frames
+        run: |
+          python scripts/audit_clgb71_spine_render.py \
+            --frames-dir evidence/selected-rgb/screenshots \
+            --report evidence/selected-rgb-render-anomaly-report.json
+      - name: Preserve evidence even if visual review fails
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: clgb71-official-render-artistic-review
+          if-no-files-found: warn
+          retention-days: 90
+          path: |
+            evidence/render-anomaly-report.json
+            evidence/selected-native-evidence-report.json
+            evidence/selected-rgb-render-anomaly-report.json
+
+      - name: Save audit report in private draft Release if artifact quota is full
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          for file in evidence/render-anomaly-report.json evidence/selected-native-evidence-report.json evidence/selected-rgb-render-anomaly-report.json; do
+            test -s "$file" || { echo "::error::Required selected-native audit missing: $file"; exit 1; }
+          done
+          TAG="audit/clgb71/${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$TAG" \
+            evidence/render-anomaly-report.json \
+            evidence/selected-native-evidence-report.json \
+            evidence/selected-rgb-render-anomaly-report.json \
+            --draft --latest=false --target "$GITHUB_SHA" \
+            --title "Private clgb71 original + selected native audit ${GITHUB_RUN_ID}" \
+            --notes "Technical native-frame comparison only; original Photoshop RGBA parity and artistic approval NOT claimed"
+          gh release view "$TAG" --json isDraft,assets --jq '
+            .isDraft and
+            ([.assets[].name] | index("render-anomaly-report.json") != null and
+             index("selected-native-evidence-report.json") != null and
+             index("selected-rgb-render-anomaly-report.json") != null)' | grep -Fxq true
