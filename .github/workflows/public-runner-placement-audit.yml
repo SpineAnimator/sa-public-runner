@@ -1,4 +1,4 @@
-name: Public runner placement audit (six approved repositories)
+name: Public runner placement audit (seven approved repositories)
 # Only GitHub-hosted runners are allowed; private/self-hosted execution is prohibited.
 
 on:
@@ -57,9 +57,15 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          repository: vladleopold/spine-link-computer
+          repository: SpineAnimator/spine-link-computer
           ref: main
           path: repos/spine-link-computer
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/spine-web-source
+          ref: main
+          path: repos/spine-web-source
           persist-credentials: false
       - name: Enforce GitHub-hosted Ubuntu runners in all approved repositories
         shell: bash
@@ -76,6 +82,7 @@ jobs:
               Path("repos/spine-scripts"),
               Path("repos/Spine-Link-project-export"),
               Path("repos/spine-link-computer"),
+              Path("repos/spine-web-source"),
           ]
           allowed = {"ubuntu-latest", "ubuntu-22.04", "ubuntu-24.04", "ubuntu-slim"}
           failures = []
@@ -93,7 +100,7 @@ jobs:
                       continue
                   text = path.read_text(encoding="utf-8")
                   for number, line in enumerate(text.splitlines(), 1):
-                      match = re.match(r"^\s*runs-on:\s*(.*?)\s*$", line)
+                      match = re.match(r"^\\s*runs-on:\\s*(.*?)\\s*$", line)
                       if not match:
                           continue
                       total += 1
@@ -112,15 +119,20 @@ jobs:
           print(f"WORKFLOW_RUNNER_JOBS_SCANNED={total}")
           print("APPROVED_EXECUTION_REPOSITORIES=" + ",".join(str(p) for p in roots))
           if failures:
-              print("\n".join(failures), file=sys.stderr)
+              print("\\n".join(failures), file=sys.stderr)
               sys.exit(1)
           if total == 0:
               raise SystemExit("No workflow jobs with explicit runs-on were found")
           print("PUBLIC_UBUNTU_RUNNER_POLICY_PASS")
           PY
-      - name: Lint runner audit and Spine Link reusable workflow
+      - name: Lint runner audit and all approved reusable workflows
         run: |
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
-            .github/workflows/public-runner-placement-audit.yml \
-            repos/Spine-Link-project-export/.github/workflows/last7-real-preview.yml \
-            repos/spine-link-computer/.github/workflows/ci.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \\
+            .github/workflows/public-runner-placement-audit.yml \\
+            repos/Spine-Link-project-export/.github/workflows/last7-real-preview.yml \\
+            repos/spine-link-computer/.github/workflows/ci.yml \\
+            repos/spine-web-source/.github/workflows/verify-3spine-generation.yml \\
+            repos/spine-web-source/.github/workflows/verify-cloudflare-fallback.yml \\
+            repos/spine-web-source/.github/workflows/verify-manual-multi-mask.yml \\
+            repos/spine-web-source/.github/workflows/verify-mask-linux-api.yml \\
+            repos/spine-web-source/.github/workflows/verify-mask-mobile-runtime.yml
