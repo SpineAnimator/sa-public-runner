@@ -1,0 +1,189 @@
+name: Spine Mask | public Ubuntu API and licensed Editor roundtrip
+on:
+  workflow_call:
+    inputs:
+      run-editor-roundtrip:
+        description: Run the licensed Editor roundtrip on trusted non-PR events
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      SPINE_LICENSE:
+        required: false
+      SPINE_LINUX_URL:
+        required: false
+
+permissions:
+  contents: read
+concurrency:
+  group: spine-mask-cloudflare-licensed-editor
+  cancel-in-progress: false
+jobs:
+  api-security-and-zip-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate 4MiB chunk hashes, GitHub agent auth and v1 compatibility
+        shell: bash
+        run: |
+          set +e
+          node --test tests/spine-mask-v2-gateway.test.mjs 2>&1 | tee "$RUNNER_TEMP/spine-mask-gateway-tests.log"
+          result=${PIPESTATUS[0]}
+          echo "GATEWAY_NODE_TEST_EXIT=$result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Validate synthetic complete Spine ZIP, unbound images and ZipSlip protection
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s tests -p test_spine_mask_v2_ci.py -v 2>&1 | tee "$RUNNER_TEMP/spine-mask-python-tests.log"
+          result=${PIPESTATUS[0]}
+          echo "GATEWAY_PYTHON_TEST_EXIT=$result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Retain nonsensitive synthetic CI diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spine-mask-v2-offline-test-diagnostics
+          path: |
+            ${{ runner.temp }}/spine-mask-gateway-tests.log
+            ${{ runner.temp }}/spine-mask-python-tests.log
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Check Python and native shell contract
+        run: |
+          python -m py_compile scripts/spine_mask_v2_ci.py
+          echo 'SPINE_MASK_V2_OFFLINE_CONTRACT_PASS'
+
+  licensed-ubuntu-api-roundtrip:
+    if: inputs.run-editor-roundtrip && github.event_name != 'pull_request' && github.repository == 'vladleopold/3Spine-core'
+    needs: api-security-and-zip-regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      SPINE_MASK_GATEWAY: https://spine-mask-native-gateway.vladyslavchaplygin.workers.dev
+      GH_TOKEN: ${{ github.token }}
+      SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
+      SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Enqueue synthetic full Spine ZIP through the same website API
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: python scripts/spine_mask_v2_ci.py --selftest
+      - name: Poll private Cloudflare v2 queue with GitHub Actions token
+        id: next
+        run: python scripts/spine_mask_v2_ci.py --probe
+      - name: Require licensed Editor configured on isolated Ubuntu
+        if: steps.next.outputs.found == 'true'
+        shell: bash
+        run: |
+          test -n "$SPINE_LICENSE" || { echo "::error::SPINE_LICENSE missing"; exit 1; }
+          test -n "$SPINE_LINUX_URL" || { echo "::error::SPINE_LINUX_URL missing"; exit 1; }
+      - name: Install Spine 4.3.26 and headless Linux OpenGL dependencies
+        if: steps.next.outputs.found == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb x11-utils x11-xserver-utils \
+            libxrandr2 libgl1-mesa-dri libgl1 libxrender1 libxi6 \
+            libxext6 libxfixes3 libxcursor1
+          curl --fail --location --silent --show-error --max-time 600 --retry 2 \
+            -A 'Mozilla/5.0 (X11; Linux x86_64)' "$SPINE_LINUX_URL" \
+            -o "$RUNNER_TEMP/spine-linux.gz"
+          gzip -t "$RUNNER_TEMP/spine-linux.gz"
+          mkdir -p "$RUNNER_TEMP/spine"
+          gzip -dc "$RUNNER_TEMP/spine-linux.gz" | tar -xf - -C "$RUNNER_TEMP/spine"
+          SPINE_CLI="$RUNNER_TEMP/spine/Spine/Spine.sh"
+          test -x "$SPINE_CLI"
+          echo "SPINE_CLI=$SPINE_CLI" >> "$GITHUB_ENV"
+      - name: Receive full project, SHA-256 verify, native import/export and send ZIP
+        if: steps.next.outputs.found == 'true'
+        shell: bash
+        env:
+          JOB_ID: ${{ steps.next.outputs.id }}
+        run: |
+          set -euo pipefail
+          python scripts/spine_mask_v2_ci.py --process-id "$JOB_ID"
+          test -s "$RUNNER_TEMP/spine-mask-v2-receipt.json"
+          python - <<'PY'
+          import json,os
+          path=os.path.join(os.environ['RUNNER_TEMP'],'spine-mask-v2-receipt.json')
+          r=json.load(open(path))
+          assert r['clippingAttachments']==1 and r['nativeImportVerified'] and r['nativeExportVerified']
+          assert r['originalAssetsRetained']>=1
+          assert r['animationsPreserved']
+          print('SPINE_MASK_V2_NATIVE_RECEIPT_VERIFIED',r['jobId'])
+          PY
+      - name: Download the returned ZIP through the site's read-token API
+        if: steps.next.outputs.found == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        shell: bash
+        run: python scripts/spine_mask_v2_ci.py --read-selftest
+      - uses: actions/setup-node@v4
+        if: steps.next.outputs.found == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        with:
+          node-version: '22'
+      - name: Prepare Chromium for live site to licensed Ubuntu Spine Editor proof
+        if: steps.next.outputs.found == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/mask-browser" --no-audit --no-fund --silent playwright@1.56.1
+          CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || true)"
+          if [ -z "$CHROME" ]; then
+            "$RUNNER_TEMP/mask-browser/node_modules/.bin/playwright" install chromium
+          fi
+          echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+      - name: Live browser Simple Make all through Cloudflare API and licensed Ubuntu Spine Editor
+        if: steps.next.outputs.found == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/spine-mask-browser-e2e.mjs
+          echo 'SPINE_MASK_LIVE_SITE_SERVER_LINUX_EDITOR_PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Always retain SHA-256 receipt in GitHub Actions summary
+        if: success() && steps.next.outputs.found == 'true'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os
+          report=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'spine-mask-v2-receipt.json')))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as summary:
+              summary.write('## Licensed Ubuntu Spine Mask API roundtrip passed\n')
+              summary.write('Input SHA-256: `'+report['inputSha256']+'`\n\n')
+              summary.write('Returned ZIP SHA-256: `'+report['resultSha256']+'`\n\n')
+              summary.write('Spine Editor: '+report['spineVersion']+', clipping attachments: '+str(report['clippingAttachments'])+'\n')
+          PY
+      - name: Retain only nonsensitive native verification receipt as CI evidence
+        if: success() && steps.next.outputs.found == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: spine-mask-v2-native-ubuntu-receipt
+          path: ${{ runner.temp }}/spine-mask-v2-receipt.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Deactivate licensed Spine session and erase temporary data
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "$SPINE_CLI" ] && [ -x "$SPINE_CLI" ]; then
+            timeout 180 xvfb-run -a "$SPINE_CLI" -l >/dev/null 2>&1 || true
+          fi
+          rm -rf "$RUNNER_TEMP/spine" "$RUNNER_TEMP/spine-linux.gz" \
+            "$RUNNER_TEMP/spine-mask-v2-selftest-session.json"
