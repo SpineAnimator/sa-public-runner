@@ -1,4 +1,4 @@
-name: Public runner placement audit
+name: Public runner placement audit (five approved repositories)
 
 on:
   push:
@@ -75,6 +75,9 @@ jobs:
           for root in roots:
               workflow_dir = root / ".github" / "workflows"
               if not workflow_dir.is_dir():
+                  if root.name == "spine-scripts":
+                      print(f"{root}: no workflow directory; no Action jobs to migrate")
+                      continue
                   failures.append(f"{root}: missing .github/workflows")
                   continue
               for path in sorted(workflow_dir.rglob("*")):
