@@ -99,11 +99,11 @@ jobs:
                       total += 1
                       value = match.group(1).strip().strip(chr(34)).strip(chr(39))
                       bridge_platform = (
-                          path.as_posix() == ".github/workflows/build-mask-bridge.yml"
+                          path.name in {"build-mask-bridge.yml", "spine-mask-bridge-platform-tests.yml"}
                           and value in {"windows-latest", "macos-latest"}
                       )
                       bridge_matrix = (
-                          path.as_posix() == ".github/workflows/spine-mask-bridge-platform-tests.yml"
+                          path.name == "spine-mask-bridge-platform-tests.yml"
                           and value == "${{ matrix.os }}"
                           and "os: [ubuntu-24.04, windows-latest, macos-latest]" in text
                       )
