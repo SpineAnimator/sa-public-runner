@@ -1,6 +1,9 @@
 name: Public Ubuntu executor | spine link full cloud e2e
 on:
   workflow_call:
+    secrets:
+      SOURCE_REPO_TOKEN:
+        required: true
 permissions:
   contents: read
 jobs:
