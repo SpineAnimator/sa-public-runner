@@ -31,7 +31,7 @@ jobs:
         with:
           go-version: '1.24.0'
           cache: false
-      - name: Lint reusable workflow contracts
+      - name: Lint and enforce public runner contracts
         shell: bash
         run: |
           set -euo pipefail
@@ -49,10 +49,6 @@ jobs:
             .github/workflows/3spine-converter-test.yml
           )
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 "${workflows[@]}"
-      - name: Reject private executor labels in reusable Ubuntu workflows
-        shell: bash
-        run: |
-          set -euo pipefail
           for workflow in "${workflows[@]}"; do
             grep -Fq 'workflow_call:' "$workflow"
             grep -Fq 'runs-on: ubuntu-24.04' "$workflow"
