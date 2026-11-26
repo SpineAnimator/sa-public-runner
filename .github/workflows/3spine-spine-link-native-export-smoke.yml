@@ -7,21 +7,23 @@ jobs:
   official-project:
     runs-on: ubuntu-24.04
     timeout-minutes: 22
+    defaults:
+      run:
+        working-directory: 3spine
     env:
       SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
       SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
       LIBGL_ALWAYS_SOFTWARE: '1'
       GALLIUM_DRIVER: llvmpipe
     steps:
-      - name: Check out trusted source-preserving export helper
+      - name: Checkout private 3Spine source
         uses: actions/checkout@v4
         with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
           persist-credentials: false
-          filter: blob:none
-          sparse-checkout: |
-            scripts/spine-editor-export.mjs
-            tests/spine-editor-export.test.mjs
-          sparse-checkout-cone-mode: false
 
       - name: Test safe legacy image-path recovery
         run: node --test tests/spine-editor-export.test.mjs
@@ -31,7 +33,7 @@ jobs:
         with:
           repository: EsotericSoftware/spine-runtimes
           ref: '4.3'
-          path: official
+          path: 3spine/official
           persist-credentials: false
           filter: blob:none
           sparse-checkout: |
@@ -65,7 +67,7 @@ jobs:
           # The launcher requests activation on stdin for a new CI runner.
           printf '%s\n' "$SPINE_LICENSE" | timeout 240 xvfb-run -a -s '-screen 0 1600x1000x24' \
             "$SPINE_CLI" --update 4.3.26 \
-            --input "$GITHUB_WORKSPACE/official/examples/spineboy/spineboy-ess.spine" \
+            --input "$GITHUB_WORKSPACE/3spine/official/examples/spineboy/spineboy-ess.spine" \
             --output "$GITHUB_WORKSPACE/out" --export json+pack
 
       - name: Export a complete Spine project through the Spine-Link cloud exporter
@@ -81,7 +83,7 @@ jobs:
           xvfb-run -a node --input-type=module <<'NODE'
           import path from 'node:path';
           import { runLicensedSpineExport } from './scripts/spine-editor-export.mjs';
-          const workspaceRoot = process.env.GITHUB_WORKSPACE;
+          const workspaceRoot = path.join(process.env.GITHUB_WORKSPACE, '3spine');
           const projectDir = path.join(workspaceRoot, 'storage', 'library_02', 'spine-link-native-export-e2e');
           const result = runLicensedSpineExport({
             cli: process.env.SPINE_CLI,
