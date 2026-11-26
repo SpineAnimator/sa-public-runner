@@ -4,13 +4,6 @@ on:
     secrets:
       SPINE_LINUX_URL:
         required: false
-    secrets:
-      SPINE_LINUX_URL:
-        required: false
-permissions:
-  contents: read
-jobs:
-  health:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
