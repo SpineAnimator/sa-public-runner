@@ -37,7 +37,7 @@ jobs:
         with:
           repository: EsotericSoftware/spine-runtimes
           ref: '4.3'
-          path: official
+          path: 3spine/official
           persist-credentials: false
           filter: blob:none
           sparse-checkout: |
