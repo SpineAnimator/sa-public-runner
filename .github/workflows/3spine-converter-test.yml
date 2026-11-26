@@ -4,11 +4,6 @@ on:
     secrets:
       SOURCE_REPO_TOKEN:
         required: false
-    secrets:
-      SOURCE_REPO_TOKEN:
-        required: true
-jobs:
-  spine-archive-runner-config:
     permissions:
       contents: read
     runs-on: ubuntu-24.04
