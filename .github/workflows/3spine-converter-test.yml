@@ -1,0 +1,74 @@
+name: Public Ubuntu executor | 3Spine converter CI/CD
+on:
+  workflow_call:
+jobs:
+  spine-archive-runner-config:
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated spine archive runner configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_spine_archive_runner_config.py
+          bash -n setup/start_spine_runner.sh setup/check_spine_runner.sh
+          echo "SPINE_ARCHIVE_RUNNER_CONFIG_OK"
+
+  # ---- check: build the converter image and run fixtures on the private Linux runner ----
+  backend-container:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image (Linux)
+        run: docker build -t spine-backend:ci ./backend
+
+      - name: Convert real .skel fixtures with the native converter
+        run: |
+          mkdir -p /tmp/ci
+          for sk in examples/*.skel; do
+            echo "== $sk =="
+            docker run --rm -v "$PWD:/repo" -v /tmp/ci:/data spine-backend:ci \
+              /opt/spine-converter/converter/SpineSkeletonDataConverter \
+              "/repo/$sk" "/data/$(basename "$sk" .skel).json" 2>&1 | tail -3 || true
+          done
+          docker run --rm -i -v /tmp/ci:/data spine-backend:ci \
+            python3 - <<'PY'
+          import json, pathlib
+          # строгая проверка: plum.skel обязан конвертиться полностью
+          d = json.load(open("/data/plum.json"))
+          spine = d["skeleton"]["spine"]
+          assert spine.startswith("3.8"), spine
+          assert len(d["bones"]) == 5
+          assert len(d["slots"]) == 4
+          assert len(d["animations"]) == 1
+          print("PLUM OK — spine", spine, "| bones 5 | slots 4 | anim 1")
+          PY
+
+      - name: HTTP service health
+        run: |
+          docker run -d --name spine-backend-test -p 18080:8080 spine-backend:ci
+          sleep 3
+          curl -fsS http://127.0.0.1:18080/health
+          echo
+          docker rm -f spine-backend-test
+
+  # ---- E2E: Linux + Docker (GitHub-hosted runner — локально ничего не нужно) ----
+  linux-e2e:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    needs: backend-container
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Native converter executes on Linux via Docker
+        run: |
+          docker build -t spine-backend:runner ./backend
+          mkdir -p /tmp/shr
+          docker run --rm -v "$PWD/examples/plum.skel:/data/plum.skel:ro" -v /tmp/shr:/data spine-backend:runner \
+            /opt/spine-converter/converter/SpineSkeletonDataConverter /data/plum.skel /data/plum.json
+          docker run --rm -i -v /tmp/shr:/data spine-backend:runner \
+            python3 -c "import json; d=json.load(open('/data/plum.json')); assert d['skeleton']['spine'].startswith('3.8'); print('E2E OK — spine', d['skeleton']['spine'], '| bones', len(d['bones']))"
