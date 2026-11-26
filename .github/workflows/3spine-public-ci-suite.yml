@@ -194,7 +194,6 @@ jobs:
           echo "CHROME_PATH=/usr/bin/google-chrome" >> "$GITHUB_ENV"
       - name: Run Node saver self-tests
         run: npm test
-; then exit 1; fi
           if grep -Ei 'github_pat_|ghp_[A-Za-z0-9]{20}|BEGIN .*PRIVATE KEY|SPINE_LICENSE|CLOUDFLARE_API_TOKEN' frontend/index.html frontend/preview.html frontend/js/app.js; then
             echo '::error::Possible secret embedded in public frontend assets'
             exit 1
