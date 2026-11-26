@@ -47,7 +47,7 @@ class BridgePublicExecutorContractTests(unittest.TestCase):
     def test_platform_contracts_use_only_the_explicit_public_os_matrix(self):
         source = (ROOT / ".github" / "workflows" / "spine-mask-bridge-platform-tests.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_call:", source)
-        self.assertIn("os: [ubuntu-latest, windows-latest, macos-latest]", source)
+        self.assertIn("os: [ubuntu-24.04, windows-latest, macos-latest]", source)
         self.assertIn("runs-on: ${{ matrix.os }}", source)
         self.assertNotIn("self-hosted", source.lower())
 
