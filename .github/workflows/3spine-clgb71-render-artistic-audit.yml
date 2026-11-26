@@ -15,16 +15,28 @@ jobs:
   # private repository has no hosted-runner allocation. Keep only licensed native
   # evidence review here; it must execute on the configured 3Spine Ubuntu runner.
   review-real-spine-frames:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.head_branch == 'main') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == 'vladleopold/3Spine-core' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: 3spine
+    env:
+      SOURCE_REPOSITORY: vladleopold/3Spine-core
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: 3spine
+          persist-credentials: false
       - name: Choose an actual successful licensed Editor workflow run
         id: native
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
           REQUESTED_RUN_ID: ${{ inputs.source_run_id }}
           EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
@@ -34,7 +46,7 @@ jobs:
             echo '::error::No exact native Editor run ID; stale-success fallback is forbidden'
             exit 1
           }
-          printf '%s' "$META" | jq -e --arg repo "$GITHUB_REPOSITORY" --argjson run_id "$RUN_ID" '
+          printf '%s' "$META" | jq -e --arg repo "$SOURCE_REPOSITORY" --argjson run_id "$RUN_ID" '
             .id == $run_id and
             .repository.full_name == $repo and
             .head_repository.full_name == $repo and
@@ -74,7 +86,7 @@ jobs:
       - name: Restore real Editor evidence from Actions artifact or private draft Release
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
           RUN_ID: ${{ steps.native.outputs.run_id }}
           EXPECTED_HEAD_SHA: ${{ steps.native.outputs.head_sha }}
           EXPECTED_HEAD_BRANCH: ${{ steps.native.outputs.head_branch }}
@@ -84,7 +96,7 @@ jobs:
           mkdir -p evidence
           # Trust-check the exact branch run, commit and attempt selected above.
           META="$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}")"
-          printf '%s' "$META" | jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXPECTED_HEAD_SHA" --arg branch "$EXPECTED_HEAD_BRANCH" --argjson attempt "$EXPECTED_ATTEMPT" '
+          printf '%s' "$META" | jq -e --arg repo "$SOURCE_REPOSITORY" --arg sha "$EXPECTED_HEAD_SHA" --arg branch "$EXPECTED_HEAD_BRANCH" --argjson attempt "$EXPECTED_ATTEMPT" '
             .repository.full_name == $repo and
             .head_repository.full_name == $repo and
             .head_branch == $branch and
@@ -94,15 +106,15 @@ jobs:
             (.path | endswith("/verify-clgb71-editor-linux.yml"))
           ' >/dev/null
           if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq 'clgb71-licensed-spine-4-3-26-linux-evidence'; then
-            gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n clgb71-licensed-spine-4-3-26-linux-evidence -D evidence
+            gh run download "$RUN_ID" -R "$SOURCE_REPOSITORY" -n clgb71-licensed-spine-4-3-26-linux-evidence -D evidence
           else
             TAG="evidence/clgb71/${RUN_ID}-attempt-${EXPECTED_ATTEMPT}"
-            gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json isDraft,assets --jq '
+            gh release view "$TAG" -R "$SOURCE_REPOSITORY" --json isDraft,assets --jq '
               .isDraft == true and
               ([.assets[].name] | index("clgb71-native-allframes-evidence.zip") != null and
                index("clgb71-selected-licensed-rgb-candidate.zip") != null)' | grep -Fxq true
-            gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p clgb71-native-allframes-evidence.zip -D evidence
-            gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p clgb71-selected-licensed-rgb-candidate.zip -D evidence
+            gh release download "$TAG" -R "$SOURCE_REPOSITORY" -p clgb71-native-allframes-evidence.zip -D evidence
+            gh release download "$TAG" -R "$SOURCE_REPOSITORY" -p clgb71-selected-licensed-rgb-candidate.zip -D evidence
             python - <<'PYZIP'
           import stat, zipfile
           from pathlib import Path
@@ -166,10 +178,10 @@ jobs:
       - name: Verify all 98 selected native PNG bytes and exact source-run provenance
         env:
           RUN_ID: ${{ steps.native.outputs.run_id }}
-          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          META="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/$RUN_ID")"
+          META="$(gh api "repos/${SOURCE_REPOSITORY}/actions/runs/$RUN_ID")"
           EXPECTED_HEAD_SHA="${{ steps.native.outputs.head_sha }}"
           jq -e --argjson run_id "$RUN_ID" --arg head_sha "$EXPECTED_HEAD_SHA" '
             .native_run_id == $run_id and .native_head_sha == $head_sha
@@ -204,7 +216,7 @@ jobs:
         if: always()
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
         run: |
           set -euo pipefail
           for file in evidence/render-anomaly-report.json evidence/selected-native-evidence-report.json evidence/selected-rgb-render-anomaly-report.json; do
