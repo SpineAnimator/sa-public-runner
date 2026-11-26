@@ -1,4 +1,4 @@
-name: Public runner placement audit (six approved repositories)
+name: Public runner placement audit (seven approved repositories)
 # Only GitHub-hosted runners are allowed; private/self-hosted execution is prohibited.
 
 on:
@@ -61,6 +61,12 @@ jobs:
           ref: main
           path: repos/spine-link-computer
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/spine-web-source
+          ref: main
+          path: repos/spine-web-source
+          persist-credentials: false
       - name: Enforce GitHub-hosted Ubuntu runners in all approved repositories
         shell: bash
         run: |
@@ -76,6 +82,7 @@ jobs:
               Path("repos/spine-scripts"),
               Path("repos/Spine-Link-project-export"),
               Path("repos/spine-link-computer"),
+              Path("repos/spine-web-source"),
           ]
           allowed = {"ubuntu-latest", "ubuntu-22.04", "ubuntu-24.04", "ubuntu-slim"}
           failures = []
@@ -118,9 +125,14 @@ jobs:
               raise SystemExit("No workflow jobs with explicit runs-on were found")
           print("PUBLIC_UBUNTU_RUNNER_POLICY_PASS")
           PY
-      - name: Lint runner audit and Spine Link reusable workflow
+      - name: Lint runner audit and all approved public workflows
         run: |
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
             .github/workflows/public-runner-placement-audit.yml \
             repos/Spine-Link-project-export/.github/workflows/last7-real-preview.yml \
-            repos/spine-link-computer/.github/workflows/ci.yml
+            repos/spine-link-computer/.github/workflows/ci.yml \
+            repos/spine-web-source/.github/workflows/verify-3spine-generation.yml \
+            repos/spine-web-source/.github/workflows/verify-cloudflare-fallback.yml \
+            repos/spine-web-source/.github/workflows/verify-manual-multi-mask.yml \
+            repos/spine-web-source/.github/workflows/verify-mask-linux-api.yml \
+            repos/spine-web-source/.github/workflows/verify-mask-mobile-runtime.yml
