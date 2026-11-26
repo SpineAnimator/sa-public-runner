@@ -27,8 +27,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ! grep -n 'allowed_origins.*\*' spine-bridge/install_spinemask_host.py
-          ! grep -n 'MASK_NATIVE.*READ_FILE' spine-bridge/background.js
+          if grep -n 'allowed_origins.*\\*' spine-bridge/install_spinemask_host.py; then
+            echo "::error::Wildcard Native Messaging origins are forbidden"
+            exit 1
+          fi
+          if grep -n 'MASK_NATIVE.*READ_FILE' spine-bridge/background.js; then
+            echo "::error::Arbitrary native file reads are forbidden"
+            exit 1
+          fi
           test -s spine-bridge/spinemaskbridge.py
           test -s spine-bridge/mask-content.js
           echo 'SPINE_MASK_BRIDGE_SECURITY_GATE_PASS'
