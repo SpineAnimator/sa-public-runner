@@ -101,6 +101,8 @@ jobs:
               raise SystemExit("No workflow jobs with explicit runs-on were found")
           print("PUBLIC_UBUNTU_RUNNER_POLICY_PASS")
           PY
-      - name: Lint this workflow
+      - name: Lint runner audit and Spine Link reusable workflow
         run: |
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/public-runner-placement-audit.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
+            .github/workflows/public-runner-placement-audit.yml \
+            repos/Spine-Link-project-export/.github/workflows/last7-real-preview.yml
