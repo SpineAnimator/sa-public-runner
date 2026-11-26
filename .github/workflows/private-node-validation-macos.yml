@@ -1,4 +1,4 @@
-name: Private repository Node validation (authorized macOS runner)
+name: Private repository Node validation (public Ubuntu runner)
 on:
   workflow_call:
     inputs:
@@ -17,11 +17,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   validate:
-    name: ${{ inputs.suite }} on caller-authorized self-hosted macOS
-    runs-on: [self-hosted, macOS, X64]
+    name: ${{ inputs.suite }} on public Ubuntu 24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - name: Verify runner belongs to caller context
+      - name: Verify public Ubuntu runner allocation
         shell: bash
         run: |
           set -euo pipefail
@@ -29,8 +29,8 @@ jobs:
           echo "runner_name=${RUNNER_NAME}"
           echo "runner_os=${RUNNER_OS}"
           echo "runner_arch=${RUNNER_ARCH}"
-          test "${RUNNER_OS}" = "macOS"
-          test "${RUNNER_ARCH}" = "X64"
+          test "${RUNNER_OS}" = "Linux"
+          grep -q 'Ubuntu 24.04' /etc/os-release
           uname -a
       - name: Checkout private caller source
         uses: actions/checkout@v7
