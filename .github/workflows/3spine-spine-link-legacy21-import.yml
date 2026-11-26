@@ -1,6 +1,11 @@
 name: Public Ubuntu executor | spine link legacy21 import
 on:
   workflow_call:
+    secrets:
+      SPINE_LICENSE:
+        required: false
+      SPINE_LINUX_URL:
+        required: false
 permissions:
   contents: read
 jobs:
