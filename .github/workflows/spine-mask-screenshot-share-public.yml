@@ -1,0 +1,57 @@
+name: Spine Mask private screenshot one-time link on public Ubuntu
+on:
+  workflow_call:
+    secrets:
+      SOURCE_REPO_TOKEN:
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  secure-link:
+    name: Deliver verified screenshot through protected one-time link
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+      GH_REPO: vladleopold/3Spine-core
+    steps:
+      - name: Verify public Ubuntu runner
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = Linux
+          grep -q 'Ubuntu 24.04' /etc/os-release
+      - name: Deliver verified real Spine Editor screenshot through 30-minute protected link
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'vladleopold/3Spine-core'
+          umask 077
+          gh api "repos/$GH_REPO/git/blobs/532b885d363a9ecbc540faecbff84ba68e37d9ea" --jq .content \
+            | tr -d '\n' | base64 -d | base64 -d > "$RUNNER_TEMP/native-editor.png"
+          python3 - <<'PY'
+          import struct,os
+          p=os.environ['RUNNER_TEMP']+'/native-editor.png'
+          with open(p,'rb') as f:h=f.read(24)
+          assert h[:8]==b'\x89PNG\r\n\x1a\n'
+          assert struct.unpack('>II',h[16:24])==(933,700)
+          print('PRIVATE_NATIVE_SCREENSHOT_VALIDATED',os.path.getsize(p))
+          PY
+          UUID="$(cat /proc/sys/kernel/random/uuid)"
+          READ_TOKEN="$(openssl rand -hex 32)"
+          BASE="https://spine-mask-private-screenshot.vladyslavchaplygin.workers.dev"
+          CODE="$(curl --silent --show-error --max-time 20 -o "$RUNNER_TEMP/upload-response.json" -w '%{http_code}' \
+            -X PUT -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-Read-Token: $READ_TOKEN" -H 'Content-Type: image/png' \
+            --data-binary @"$RUNNER_TEMP/native-editor.png" "$BASE/private/$UUID")"
+          test "$CODE" = 201
+          URL="$BASE/view/$UUID?key=$READ_TOKEN"
+          curl --fail --silent --show-error --max-time 15 "$URL" -o "$RUNNER_TEMP/readback.png"
+          cmp "$RUNNER_TEMP/native-editor.png" "$RUNNER_TEMP/readback.png"
+          TAG="spine-mask-screenshot-link-$GITHUB_RUN_ID-attempt-$GITHUB_RUN_ATTEMPT"
+          NOTES="Private one-time screenshot URL (expires in 30 minutes): $URL"
+          gh release create "$TAG" --repo "$GH_REPO" --target main --draft --latest=false \
+            --title "Private Spine Mask screenshot link $GITHUB_RUN_ID" --notes "$NOTES"
+          echo 'PRIVATE_NATIVE_SCREENSHOT_ROUNDTRIP_PASS'
+          echo "PRIVATE_SCREENSHOT_LINK_STORED_IN_PRIVATE_DRAFT_RELEASE=$TAG"
+          rm -f "$RUNNER_TEMP/native-editor.png" "$RUNNER_TEMP/readback.png" "$RUNNER_TEMP/upload-response.json"
