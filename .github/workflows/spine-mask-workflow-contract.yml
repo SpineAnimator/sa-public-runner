@@ -7,6 +7,17 @@ on:
       - '.github/workflows/public-ubuntu-runner-probe.yml'
       - '.github/workflows/private-node-validation-macos.yml'
       - '.github/workflows/spine-mask-workflow-contract.yml'
+      - '.github/workflows/spine-mask-full-project-ubuntu.yml'
+      - '.github/workflows/public-ubuntu-runner-probe.yml'
+      - '.github/workflows/private-node-validation-macos.yml'
+      - '.github/workflows/3spine-spine-link-full-cloud-e2e.yml'
+      - '.github/workflows/3spine-spine-link-computer-worker-health.yml'
+      - '.github/workflows/3spine-spine-link-legacy21-import.yml'
+      - '.github/workflows/3spine-spine-link-native-export-smoke.yml'
+      - '.github/workflows/3spine-spine-link-convert-target-legacy.yml'
+      - '.github/workflows/3spine-spine-link-latest20-legacy-convert.yml'
+      - '.github/workflows/3spine-clgb71-render-artistic-audit.yml'
+      - '.github/workflows/3spine-converter-test.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,17 +39,33 @@ jobs:
         run: |
           set -euo pipefail
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
-            .github/workflows/spine-mask-full-project-ubuntu.yml \
-            .github/workflows/public-ubuntu-runner-probe.yml \
-            .github/workflows/private-node-validation-macos.yml
+            .github/workflows/spine-mask-full-project-ubuntu.yml \\
+            .github/workflows/public-ubuntu-runner-probe.yml \\
+            .github/workflows/private-node-validation-macos.yml \\
+            .github/workflows/3spine-spine-link-full-cloud-e2e.yml \\
+            .github/workflows/3spine-spine-link-computer-worker-health.yml \\
+            .github/workflows/3spine-spine-link-legacy21-import.yml \\
+            .github/workflows/3spine-spine-link-native-export-smoke.yml \\
+            .github/workflows/3spine-spine-link-convert-target-legacy.yml \\
+            .github/workflows/3spine-spine-link-latest20-legacy-convert.yml \\
+            .github/workflows/3spine-clgb71-render-artistic-audit.yml \\
+            .github/workflows/3spine-converter-test.yml
       - name: Reject private executor labels in reusable Ubuntu workflows
         shell: bash
         run: |
           set -euo pipefail
           for workflow in \
-            .github/workflows/spine-mask-full-project-ubuntu.yml \
-            .github/workflows/public-ubuntu-runner-probe.yml \
-            .github/workflows/private-node-validation-macos.yml; do
+            .github/workflows/spine-mask-full-project-ubuntu.yml \\
+            .github/workflows/public-ubuntu-runner-probe.yml \\
+            .github/workflows/private-node-validation-macos.yml \\
+            .github/workflows/3spine-spine-link-full-cloud-e2e.yml \\
+            .github/workflows/3spine-spine-link-computer-worker-health.yml \\
+            .github/workflows/3spine-spine-link-legacy21-import.yml \\
+            .github/workflows/3spine-spine-link-native-export-smoke.yml \\
+            .github/workflows/3spine-spine-link-convert-target-legacy.yml \\
+            .github/workflows/3spine-spine-link-latest20-legacy-convert.yml \\
+            .github/workflows/3spine-clgb71-render-artistic-audit.yml \\
+            .github/workflows/3spine-converter-test.yml; do
             grep -Fq 'workflow_call:' "$workflow"
             grep -Fq 'runs-on: ubuntu-24.04' "$workflow"
             if grep -Eq 'runs-on:.*self-hosted' "$workflow"; then
