@@ -30,8 +30,8 @@ jobs:
           cat > "$askpass" <<'ASKPASS'
           #!/usr/bin/env bash
           case "$1" in
-            *Username*) printf '%s\\n' 'x-access-token' ;;
-            *Password*) printf '%s\\n' "$GH_TOKEN" ;;
+            *Username*) echo 'x-access-token' ;;
+            *Password*) printf '%s' "$GH_TOKEN" ;;
             *) exit 1 ;;
           esac
           ASKPASS
@@ -40,7 +40,9 @@ jobs:
           export GIT_TERMINAL_PROMPT=0
           git ls-remote https://github.com/vladleopold/3Spine-core.git refs/heads/main > "$RUNNER_TEMP/source-repo-ref.txt"
           test -s "$RUNNER_TEMP/source-repo-ref.txt"
-          grep -Eq '^[0-9a-f]{40}[[:space:]]+refs/heads/main
+          rm -f "$askpass" "$RUNNER_TEMP/source-repo-ref.txt"
+          unset GIT_ASKPASS GIT_TERMINAL_PROMPT
+          echo "PRIVATE_3SPINE_SOURCE_ACCESS_PASS" >> "$GITHUB_STEP_SUMMARY"
 
   unit-tests:
     name: Saver unit tests and Chrome setup • public Ubuntu 24.04
