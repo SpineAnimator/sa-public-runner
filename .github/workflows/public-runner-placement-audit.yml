@@ -1,4 +1,4 @@
-name: Public runner placement audit (five approved repositories)
+name: Public runner placement audit (six approved repositories)
 # Only GitHub-hosted runners are allowed; private/self-hosted execution is prohibited.
 
 on:
@@ -55,6 +55,12 @@ jobs:
           ref: main
           path: repos/Spine-Link-project-export
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: vladleopold/spine-link-computer
+          ref: main
+          path: repos/spine-link-computer
+          persist-credentials: false
       - name: Enforce GitHub-hosted Ubuntu runners in all approved repositories
         shell: bash
         run: |
@@ -69,6 +75,7 @@ jobs:
               Path("repos/2Spine-visual-audit"),
               Path("repos/spine-scripts"),
               Path("repos/Spine-Link-project-export"),
+              Path("repos/spine-link-computer"),
           ]
           allowed = {"ubuntu-latest", "ubuntu-22.04", "ubuntu-24.04", "ubuntu-slim"}
           failures = []
@@ -106,4 +113,5 @@ jobs:
         run: |
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
             .github/workflows/public-runner-placement-audit.yml \
-            repos/Spine-Link-project-export/.github/workflows/last7-real-preview.yml
+            repos/Spine-Link-project-export/.github/workflows/last7-real-preview.yml \
+            repos/spine-link-computer/.github/workflows/ci.yml
