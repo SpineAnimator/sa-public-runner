@@ -46,6 +46,7 @@ jobs:
             echo '::error::No exact native Editor run ID; stale-success fallback is forbidden'
             exit 1
           }
+          META="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")"
           printf '%s' "$META" | jq -e --arg repo "$SOURCE_REPOSITORY" --argjson run_id "$RUN_ID" '
             .id == $run_id and
             .repository.full_name == $repo and
