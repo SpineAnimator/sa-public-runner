@@ -95,7 +95,7 @@ jobs:
           set -euo pipefail
           mkdir -p evidence
           # Trust-check the exact branch run, commit and attempt selected above.
-          META="$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}")"
+          META="$(gh api "repos/${SOURCE_REPOSITORY}/actions/runs/${RUN_ID}")"
           printf '%s' "$META" | jq -e --arg repo "$SOURCE_REPOSITORY" --arg sha "$EXPECTED_HEAD_SHA" --arg branch "$EXPECTED_HEAD_BRANCH" --argjson attempt "$EXPECTED_ATTEMPT" '
             .repository.full_name == $repo and
             .head_repository.full_name == $repo and
@@ -181,7 +181,6 @@ jobs:
           GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          META="$(gh api "repos/${SOURCE_REPOSITORY}/actions/runs/$RUN_ID")"
           EXPECTED_HEAD_SHA="${{ steps.native.outputs.head_sha }}"
           jq -e --argjson run_id "$RUN_ID" --arg head_sha "$EXPECTED_HEAD_SHA" '
             .native_run_id == $run_id and .native_head_sha == $head_sha
