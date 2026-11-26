@@ -1,6 +1,9 @@
 name: Public Ubuntu executor | 3Spine converter CI/CD
 on:
   workflow_call:
+    secrets:
+      SOURCE_REPO_TOKEN:
+        required: true
 jobs:
   spine-archive-runner-config:
     permissions:
