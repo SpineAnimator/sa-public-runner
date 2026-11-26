@@ -34,7 +34,6 @@ jobs:
             echo '::error::No exact native Editor run ID; stale-success fallback is forbidden'
             exit 1
           }
-          META="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/$RUN_ID")"
           printf '%s' "$META" | jq -e --arg repo "$GITHUB_REPOSITORY" --argjson run_id "$RUN_ID" '
             .id == $run_id and
             .repository.full_name == $repo and
@@ -65,11 +64,13 @@ jobs:
             exit 1
           }
           PROVENANCE="main-ancestor"
-          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-          echo "head_branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
-          echo "run_attempt=$ATTEMPT" >> "$GITHUB_OUTPUT"
-          echo "trusted_main_provenance=$PROVENANCE" >> "$GITHUB_OUTPUT"
+          {
+            echo "run_id=$RUN_ID"
+            echo "head_sha=$HEAD_SHA"
+            echo "head_branch=$HEAD_BRANCH"
+            echo "run_attempt=$ATTEMPT"
+            echo "trusted_main_provenance=$PROVENANCE"
+          } >> "$GITHUB_OUTPUT"
       - name: Restore real Editor evidence from Actions artifact or private draft Release
         shell: bash
         env:
