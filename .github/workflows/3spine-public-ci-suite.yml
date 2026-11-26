@@ -173,12 +173,13 @@ jobs:
           set -euo pipefail
           curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors --max-time 15 "$SITE/" -o "$RUNNER_TEMP/index.html"
           grep -Fq '<title>SPINE ANIMATOR</title>' "$RUNNER_TEMP/index.html"
-          grep -Fq 'src="./app.js"' "$RUNNER_TEMP/index.html"
+          grep -Eq 'src="./app\\.js(\\?[^"]*)?"' "$RUNNER_TEMP/index.html"
           curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --retry-all-errors --max-time 15 "$SITE/app.js" -o "$RUNNER_TEMP/app.js"
           node --check "$RUNNER_TEMP/app.js"
-          grep -Fq 'const STUDIO = location.origin;' "$RUNNER_TEMP/app.js"
-          grep -Fq 'const EXPORTER = location.origin;' "$RUNNER_TEMP/app.js"
-          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 15 "$SITE/api/health")" = 200
+          grep -Fq "const STUDIO = 'https://spine-studio.spine-animator-f8692224.workers.dev';" "$RUNNER_TEMP/app.js"
+          grep -Fq "const EXPORTER = 'https://spine-generator.spine-animator-f8692224.workers.dev';" "$RUNNER_TEMP/app.js"
+          archive="$(curl --fail --silent --show-error --max-time 15 'https://spine-archive.spine-animator-f8692224.workers.dev/api/health')"
+          jq -e '.ok == true' <<<"$archive" >/dev/null
 
   saver-npm-selftest:
     name: Spine saver Node regression suite • public Ubuntu
