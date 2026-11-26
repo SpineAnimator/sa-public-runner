@@ -1,0 +1,68 @@
+name: Verify native Spine project pairs on public Ubuntu
+on:
+  workflow_call:
+    secrets:
+      SOURCE_REPO_TOKEN:
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify-native-pairs:
+    name: Repackage 39 native Spine projects • public Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - name: Checkout private 3Spine source on public runner
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
+      - name: Pin private source revision
+        run: echo "THREESPINE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Validate isolated native bundle regression
+        run: python3 -m unittest discover -s tests -p test_native_pair_handoff.py -v
+      - name: Retrieve completed native archive from immutable history
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: results
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: historical
+          sparse-checkout: |
+            history/convert-mvgu41je-brifi5-native-complete-44043538960.zip
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Repackage 39 authentic Editor projects into complete individual ZIPs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/native_pair_handoff.py \
+            historical/history/convert-mvgu41je-brifi5-native-complete-44043538960.zip \
+            "$RUNNER_TEMP/convert-mvgu41je-brifi5-native-39-pairs-verified.zip"
+          sha256sum "$RUNNER_TEMP/convert-mvgu41je-brifi5-native-39-pairs-verified.zip"
+          python3 - <<'PY'
+          import os,zipfile,json
+          p=os.environ["RUNNER_TEMP"]+"/convert-mvgu41je-brifi5-native-39-pairs-verified.zip"
+          with zipfile.ZipFile(p) as z:
+            q=json.loads(z.read("QUALITY.json"))
+            assert q["licensed_editor_projects"]==39
+            assert q["native_pair_archives"]==39
+            assert q["fully_native"] is True
+            assert q["preview_render_verified"] is False
+            assert len([p for p in z.namelist() if p.startswith("spine/") and p.endswith(".spine")]) == 39
+            assert len([p for p in z.namelist() if p.startswith("pairs/") and p.endswith(".zip")]) == 39
+            print("FINAL_VERDICT: 39 native editor files and 39 complete asset bundles; visual test not yet done")
+          PY
+      - name: Publish verified archive only to private 3Spine results branch
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+          GH_REPO: vladleopold/3Spine-core
+        run: |
+          set -euo pipefail
+          name=convert-mvgu41je-brifi5-native-39-pairs-verified.zip
+          GITHUB_REPOSITORY="$GH_REPO" bash .codespace/publish-results.sh "verified 39 real .spine files and 39 complete bundles" \
+            "$RUNNER_TEMP/$name:history/$name"
