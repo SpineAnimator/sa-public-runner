@@ -86,13 +86,13 @@ jobs:
                       if not match:
                           continue
                       total += 1
-                      value = match.group(1).strip().strip("'\\"")
+                      value = match.group(1).strip().strip(chr(34) + chr(39))
                       if value not in allowed:
                           failures.append(f"{path}:{number}: runs-on={value!r}; allowed={sorted(allowed)}")
           print(f"WORKFLOW_RUNNER_JOBS_SCANNED={total}")
           print("APPROVED_EXECUTION_REPOSITORIES=" + ",".join(str(p) for p in roots))
           if failures:
-              print("\\n".join(failures), file=sys.stderr)
+              print("\n".join(failures), file=sys.stderr)
               sys.exit(1)
           if total == 0:
               raise SystemExit("No workflow jobs with explicit runs-on were found")
