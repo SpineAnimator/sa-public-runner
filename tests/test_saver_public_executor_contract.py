@@ -20,6 +20,12 @@ class SaverPublicExecutorContractTests(unittest.TestCase):
         self.assertIn("token: ${{ secrets.SOURCE_REPO_TOKEN }}", source)
         self.assertGreaterEqual(source.count("persist-credentials: false"), 2)
 
+    def test_private_source_preflight_avoids_rest_api_rate_limits(self):
+        source = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("git ls-remote", source)
+        self.assertIn("GIT_ASKPASS", source)
+        self.assertNotIn("gh api repos/vladleopold/3Spine-core", source)
+
     def test_unit_gate_precedes_the_seven_site_capture_matrix(self):
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("run: npm test", source)
