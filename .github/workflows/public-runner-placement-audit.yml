@@ -1,0 +1,103 @@
+name: Public runner placement audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/public-runner-placement-audit.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/public-runner-placement-audit.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-runner-placement-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Audit all approved public execution repositories
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout audit repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout approved public execution repositories
+        uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/sa-psd-tool-runner
+          ref: main
+          path: repos/sa-psd-tool-runner
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/2Spine-visual-audit
+          ref: main
+          path: repos/2Spine-visual-audit
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/spine-scripts
+          ref: main
+          path: repos/spine-scripts
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/Spine-Link-project-export
+          ref: main
+          path: repos/Spine-Link-project-export
+          persist-credentials: false
+      - name: Enforce GitHub-hosted Ubuntu runners in all approved repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, sys
+
+          roots = [
+              Path("."),
+              Path("repos/sa-psd-tool-runner"),
+              Path("repos/2Spine-visual-audit"),
+              Path("repos/spine-scripts"),
+              Path("repos/Spine-Link-project-export"),
+          ]
+          allowed = {"ubuntu-latest", "ubuntu-22.04", "ubuntu-24.04"}
+          failures = []
+          total = 0
+          for root in roots:
+              workflow_dir = root / ".github" / "workflows"
+              if not workflow_dir.is_dir():
+                  failures.append(f"{root}: missing .github/workflows")
+                  continue
+              for path in sorted(workflow_dir.rglob("*")):
+                  if path.suffix not in {".yml", ".yaml"}:
+                      continue
+                  text = path.read_text(encoding="utf-8")
+                  for number, line in enumerate(text.splitlines(), 1):
+                      match = re.match(r"^\s*runs-on:\s*(.*?)\s*$", line)
+                      if not match:
+                          continue
+                      total += 1
+                      value = match.group(1).strip().strip("'\\"")
+                      if value not in allowed:
+                          failures.append(f"{path}:{number}: runs-on={value!r}; allowed={sorted(allowed)}")
+          print(f"WORKFLOW_RUNNER_JOBS_SCANNED={total}")
+          print("APPROVED_EXECUTION_REPOSITORIES=" + ",".join(str(p) for p in roots))
+          if failures:
+              print("\\n".join(failures), file=sys.stderr)
+              sys.exit(1)
+          if total == 0:
+              raise SystemExit("No workflow jobs with explicit runs-on were found")
+          print("PUBLIC_UBUNTU_RUNNER_POLICY_PASS")
+          PY
+      - name: Lint this workflow
+        run: |
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/public-runner-placement-audit.yml
