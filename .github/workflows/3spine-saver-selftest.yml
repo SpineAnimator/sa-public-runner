@@ -26,7 +26,182 @@ jobs:
             echo "::error::SOURCE_REPO_TOKEN was not passed by the private caller repository."
             exit 1
           }
-          gh api repos/vladleopold/3Spine-core --jq 'select(.private == true and .default_branch == "main")' >/dev/null
+          askpass="$RUNNER_TEMP/source-repo-askpass.sh"
+          cat > "$askpass" <<'ASKPASS'
+          #!/usr/bin/env bash
+          case "$1" in
+            *Username*) printf '%s\\n' 'x-access-token' ;;
+            *Password*) printf '%s\\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS
+          chmod 700 "$askpass"
+          export GIT_ASKPASS="$askpass"
+          export GIT_TERMINAL_PROMPT=0
+          git ls-remote https://github.com/vladleopold/3Spine-core.git refs/heads/main > "$RUNNER_TEMP/source-repo-ref.txt"
+          test -s "$RUNNER_TEMP/source-repo-ref.txt"
+          grep -Eq '^[0-9a-f]{40}[[:space:]]+refs/heads/main
+
+  unit-tests:
+    name: Saver unit tests and Chrome setup • public Ubuntu 24.04
+    needs: check-source-access
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout trusted private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install locked dependencies and Chrome
+        run: |
+          npm ci
+          bash scripts/install-chrome-linux.sh
+          echo "CHROME_PATH=/usr/bin/google-chrome" >> "$GITHUB_ENV"
+      - name: Run saver Node unit tests
+        run: npm test
+
+  capture:
+    name: Capture • ${{ matrix.name }}
+    needs: unit-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: first-ua-kendoo
+            url: 'https://first.ua/ua/igrovie-avtomaty/kendoo/4-gold-carts'
+          - name: slotcity-spinjoy
+            url: 'https://slotcity.ua/?modals=game&game-term=spinjoy-meduzas-fortune&demo=true'
+          - name: cosmolot-demonic-dolls
+            url: 'https://cosmolot.ua/ua/game/demonic-dolls'
+          - name: playson-clover-strike
+            url: 'https://playson.com/game/clover-strike-hold-and-win'
+          - name: 3oaks-superpower-diamonds
+            url: 'https://3oaks.com/game/3_superpower_diamonds'
+          - name: slotor777-demo
+            url: 'https://slotor777.ua/ru/game/view/56dab5f9954f459f919d800306e48b35?mode=demo'
+          - name: beton-dog-house
+            url: 'https://beton.ua/game/pragmaticplay-direct-the-dog-house-megaways-1000?isDemo=true'
+    steps:
+      - name: Checkout trusted private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Capture resources in headless Chrome
+        env:
+          URLS: ${{ matrix.url }}
+          OUTPUT_DIR: ./artifacts
+          WAIT_MS: '35000'
+          HEADLESS: 'true'
+        run: node scripts/download-resources.mjs
+      - name: Build Spine packs when the packer exists
+        if: ${{ hashFiles('scripts/spine-pack.mjs') != '' }}
+        env:
+          URL: ${{ matrix.url }}
+          OUTPUT_DIR: ./artifacts
+        run: node scripts/spine-pack.mjs "$OUTPUT_DIR" "$OUTPUT_DIR"
+      - name: Generate per-site report when the reporter exists
+        if: ${{ hashFiles('scripts/report.mjs') != '' }}
+        env:
+          URL: ${{ matrix.url }}
+          OUTPUT_DIR: ./artifacts
+        run: node scripts/report.mjs "$OUTPUT_DIR" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: saver-selftest-${{ matrix.name }}-${{ github.run_id }}
+          path: artifacts
+          retention-days: 7
+          if-no-files-found: warn
+
+  summary:
+    name: Aggregate seven-site capture evidence
+    needs:
+      - unit-tests
+      - capture
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Download available capture evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: saver-selftest-*-${{ github.run_id }}
+          path: reports
+          merge-multiple: true
+      - name: Summarize the seven expected sites
+        shell: bash
+        env:
+          EXPECTED: |
+            first-ua-kendoo|https://first.ua/ua/igrovie-avtomaty/kendoo/4-gold-carts
+            slotcity-spinjoy|https://slotcity.ua/?modals=game&game-term=spinjoy-meduzas-fortune&demo=true
+            cosmolot-demonic-dolls|https://cosmolot.ua/ua/game/demonic-dolls
+            playson-clover-strike|https://playson.com/game/clover-strike-hold-and-win
+            3oaks-superpower-diamonds|https://3oaks.com/game/3_superpower_diamonds
+            slotor777-demo|https://slotor777.ua/ru/game/view/56dab5f9954f459f919d800306e48b35?mode=demo
+            beton-dog-house|https://beton.ua/game/pragmaticplay-direct-the-dog-house-megaways-1000?isDemo=true
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, json, os
+          rows = []
+          for line in os.environ['EXPECTED'].strip().splitlines():
+              name, url = line.split('|', 1)
+              rows.append((name, url))
+          found = {}
+          for path in glob.glob('reports/**/saver-report.json', recursive=True):
+              try:
+                  with open(path, encoding='utf-8') as handle:
+                      data = json.load(handle)
+              except Exception:
+                  continue
+              found[data.get('url')] = (int(data.get('files') or 0), int(data.get('spine') or 0))
+          total_files = total_spine = with_assets = 0
+          missing_reports = []
+          empty_sites = []
+          print('## Saver self-test — seven reference URLs\\n')
+          print('| Site | Files | Spine pairs | Result |')
+          print('| --- | ---: | ---: | :---: |')
+          for name, url in rows:
+              result = found.get(url)
+              if result is None:
+                  missing_reports.append(name)
+                  print('| %s | — | — | ❌ missing report |' % name)
+                  continue
+              files, spine = result
+              if files <= 0:
+                  empty_sites.append(name)
+                  print('| %s | 0 | %d | ⚠ empty capture |' % (name, spine))
+                  continue
+              total_files += files
+              total_spine += spine
+              with_assets += 1
+              print('| %s | %d | %d | ✅ captured |' % (name, files, spine))
+          print('| **Total with assets** | **%d** | **%d** | **%d/7** |' % (total_files, total_spine, with_assets))
+          if missing_reports:
+              print('\\nMissing reports: %s' % ', '.join(missing_reports))
+          if empty_sites:
+              print('\\nPages with no captured resources (likely anti-bot/empty content): %s' % ', '.join(empty_sites))
+          PY
+ "$RUNNER_TEMP/source-repo-ref.txt"
+          rm -f "$askpass" "$RUNNER_TEMP/source-repo-ref.txt"
+          unset GIT_ASKPASS GIT_TERMINAL_PROMPT
           echo "PRIVATE_3SPINE_SOURCE_ACCESS_PASS" >> "$GITHUB_STEP_SUMMARY"
 
   unit-tests:
