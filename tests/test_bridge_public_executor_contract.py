@@ -28,6 +28,29 @@ class BridgePublicExecutorContractTests(unittest.TestCase):
         self.assertNotIn("runs-on:", source)
         self.assertNotIn("steps:", source)
 
+    def test_remaining_bridge_workflows_delegate_all_jobs_to_public_executors(self):
+        expected = {
+            "mask-native-bridge.yml": "mask-native-bridge.yml",
+            "sa-agent-api-contract.yml": "sa-agent-api-contract.yml",
+            "spine-mask-bridge-platform-tests.yml": "spine-mask-bridge-platform-tests.yml",
+        }
+        for caller_name, executor_name in expected.items():
+            caller = ROOT / "repos" / "spine-resize" / ".github" / "workflows" / caller_name
+            source = caller.read_text(encoding="utf-8")
+            self.assertIn(
+                f"uses: SpineAnimator/sa-public-runner/.github/workflows/{executor_name}@",
+                source,
+            )
+            self.assertNotIn("runs-on:", source)
+            self.assertNotIn("steps:", source)
+
+    def test_platform_contracts_use_only_the_explicit_public_os_matrix(self):
+        source = (ROOT / ".github" / "workflows" / "spine-mask-bridge-platform-tests.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_call:", source)
+        self.assertIn("os: [ubuntu-latest, windows-latest, macos-latest]", source)
+        self.assertIn("runs-on: ${{ matrix.os }}", source)
+        self.assertNotIn("self-hosted", source.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
