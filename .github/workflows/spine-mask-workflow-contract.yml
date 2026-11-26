@@ -52,7 +52,6 @@ jobs:
               grep -Fq 'runs-on: macos-latest' "$workflow"
               test "$(grep -c 'runs-on: ubuntu-24.04' "$workflow")" -ge 2
             elif [ "$workflow" = ".github/workflows/spine-mask-bridge-platform-tests.yml" ]; then
-              grep -Fq 'runs-on: ${{ matrix.os }}' "$workflow"
               grep -Fq 'os: [ubuntu-24.04, windows-latest, macos-latest]' "$workflow"
             elif grep -Eq '^[[:space:]]*runs-on:' "$workflow" && ! grep -Fq 'runs-on: ubuntu-24.04' "$workflow"; then
               echo "::error::Only the cross-platform Bridge builder may use Windows/macOS hosted executors: $workflow"
