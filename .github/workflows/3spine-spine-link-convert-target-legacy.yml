@@ -1,0 +1,153 @@
+name: Public Ubuntu executor | spine link convert target legacy
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  convert:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    env:
+      SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
+      SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
+      STORAGE_GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      GALLIUM_DRIVER: llvmpipe
+      UPLOAD_ID: Spine-animation-2026-11-24T01-25-27-944Z
+    steps:
+      - name: Checkout exact original Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/spine
+          ref: main
+          token: ${{ secrets.ACCESS_TOKEN }}
+          path: storage
+          persist-credentials: true
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /library_02/index.json
+            /library_02/Spine-animation-2026-11-24T01-25-27-944Z/
+
+      - name: Validate the real library index entry before conversion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const indexPath = 'storage/library_02/index.json';
+          if (!fs.existsSync(indexPath)) throw new Error('Sparse checkout omitted library_02/index.json');
+          const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+          const entry = index.find(item => item.id === 'Spine-animation-2026-11-24T01-25-27-944Z');
+          if (!entry) throw new Error('Target upload is missing from the root library_02/index.json');
+          console.log('LEGACY_SOURCE_INDEX_ENTRY_PRESENT files=' + (entry.files?.length || 0));
+          NODE
+
+      - name: Validate original files and licensed editor configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SPINE_LICENSE" || { echo '::error::SPINE_LICENSE missing'; exit 1; }
+          test -n "$SPINE_LINUX_URL" || { echo '::error::SPINE_LINUX_URL missing'; exit 1; }
+          DIR="storage/library_02/$UPLOAD_ID"
+          test -s "$DIR/1041001003.skel"
+          test -s "$DIR/1041001003.atlas"
+          test -s "$DIR/1041001003.webp"
+          echo 'LEGACY_SOURCE_TRIAD_PRESENT'
+
+      - name: Install licensed Spine Editor on isolated Linux runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb x11-utils x11-xserver-utils libxrandr2 libgl1-mesa-dri libgl1 libxrender1 libxi6 libxext6 libxfixes3 libxcursor1
+          curl --fail --location --silent --show-error --max-time 600 --retry 2 -A 'Mozilla/5.0 (X11; Linux x86_64)' "$SPINE_LINUX_URL" -o "$RUNNER_TEMP/spine-linux.gz"
+          gzip -t "$RUNNER_TEMP/spine-linux.gz"
+          mkdir -p "$RUNNER_TEMP/installed"
+          gzip -dc "$RUNNER_TEMP/spine-linux.gz" | tar -xf - -C "$RUNNER_TEMP/installed"
+          CLI="$RUNNER_TEMP/installed/Spine/Spine.sh"
+          test -x "$CLI"
+          echo "SPINE_CLI=$CLI" >> "$GITHUB_ENV"
+          echo 'LICENSED_SPINE_EDITOR_READY'
+
+      - name: Import legacy 2.1.27 and export modern JSON preserving idleBattle
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR="$GITHUB_WORKSPACE/storage/library_02/$UPLOAD_ID"
+          SOURCE="$DIR/1041001003.skel"
+          PROJECT="$RUNNER_TEMP/legacy-imported.spine"
+          OUTPUT="$RUNNER_TEMP/converted"
+          mkdir -p "$OUTPUT"
+          imported=false
+          for version in 4.3.26 3.8.99 3.4.02; do
+            rm -f "$PROJECT"
+            set +e
+            printf '%s\n' "$SPINE_LICENSE" | timeout 300 xvfb-run -a "$SPINE_CLI" --update "$version" --input "$SOURCE" --output "$PROJECT" --import >"$RUNNER_TEMP/import-$version.log" 2>&1
+            status=$?
+            set -e
+            if [[ $status -eq 0 && -s "$PROJECT" ]]; then
+              echo "LEGACY_IMPORT_PASS editor=$version"
+              imported=true
+              break
+            fi
+            echo "LEGACY_IMPORT_RETRY editor=$version status=$status"
+          done
+          if [[ "$imported" != true ]]; then
+            echo '::error::Spine 2.1.27 import failed in all licensed compatibility attempts'
+            tail -n 50 "$RUNNER_TEMP/import-4.3.26.log" || true
+            exit 1
+          fi
+          printf '%s\n' "$SPINE_LICENSE" | timeout 300 xvfb-run -a "$SPINE_CLI" --update 4.3.26 --input "$PROJECT" --output "$OUTPUT" --export json >"$RUNNER_TEMP/export.log" 2>&1
+          node --input-type=module - "$OUTPUT" "$DIR/1041001003.json" <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const [folder,target]=process.argv.slice(2);
+          const files=fs.readdirSync(folder).filter(name=>name.toLowerCase().endsWith('.json'));
+          const candidates=files.map(name=>({name,json:JSON.parse(fs.readFileSync(path.join(folder,name),'utf8'))}))
+            .filter(x=>Array.isArray(x.json.bones)&&String(x.json.skeleton?.spine||'').startsWith('4.3.'));
+          const picked=candidates.find(x=>Object.hasOwn(x.json.animations||{},'idleBattle'));
+          if(!picked)throw new Error('Converted 4.3 JSON does not preserve the exact idleBattle animation');
+          const animations=Object.keys(picked.json.animations||{});
+          if(!animations.includes('idleBattle')||!picked.json.bones.length)throw new Error('Converted skeleton validation failed');
+          fs.copyFileSync(path.join(folder,picked.name),target);
+          console.log('LEGACY_JSON_PASS version='+picked.json.skeleton.spine+' animations='+animations.length+' idleBattle=true');
+          NODE
+
+      - name: Publish additive JSON source and queue exact preview render
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd storage
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const path='library_02/index.json';
+          const index=JSON.parse(fs.readFileSync(path,'utf8'));
+          const entry=index.find(x=>x.id==='Spine-animation-2026-11-24T01-25-27-944Z');
+          if(!entry)throw new Error('Target index entry missing');
+          const json='1041001003.json';
+          if(!entry.files.includes(json))entry.files.push(json);
+          entry.skeleton=json;
+          entry.defaultAnimation='idleBattle';
+          entry.webmStatus='pending';
+          entry.previewStatus='pending';
+          entry.previewError='';
+          entry.dispatchStatus='pending';
+          entry.lastPreviewRetryError='';
+          fs.writeFileSync(path,JSON.stringify(index,null,2)+'\n');
+          NODE
+          git add library_02/Spine-animation-2026-11-24T01-25-27-944Z/1041001003.json library_02/index.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(preview): add compatible JSON for legacy Spine animation"
+          git push origin HEAD:main
+          curl --fail --silent --show-error -X POST "https://api.github.com/repos/vladleopold/spine/dispatches" -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: application/json" --data '{"event_type":"spine-export-webm","client_payload":{"uploadId":"Spine-animation-2026-11-24T01-25-27-944Z","origin":"https://spine-link.vercel.app","owner":"vladleopold","repo":"spine","branch":"main"}}'
+          echo 'LEGACY_JSON_PUBLISHED_AND_PREVIEW_DISPATCHED'
+
+      - name: Deactivate licensed Spine Editor
+        if: always()
+        shell: bash
+        run: |
+          if [[ -x "${SPINE_CLI:-}" ]]; then timeout 180 xvfb-run -a "$SPINE_CLI" -l >/dev/null 2>&1 || true; fi
