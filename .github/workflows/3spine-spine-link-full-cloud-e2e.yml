@@ -1,0 +1,39 @@
+name: Public Ubuntu executor | spine link full cloud e2e
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  site-to-licensed-editor:
+    # Playwright 1.59 supports Ubuntu 24.04; hosted latest moved to 26.04.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            scripts/spine-link-full-cloud-e2e.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/checkout@v4
+        with:
+          repository: EsotericSoftware/spine-runtimes
+          ref: '4.3'
+          path: official
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            examples/spineboy/spineboy-ess.spine
+            examples/spineboy/images
+            examples/spineboy/license.txt
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install isolated Chromium for visual playback gate
+        run: |
+          npm install --no-save playwright@1.59.1
+          npx playwright install chromium --with-deps
+      - name: Real project upload, native export, Chromium motion, cleanup
+        run: node scripts/spine-link-full-cloud-e2e.mjs
