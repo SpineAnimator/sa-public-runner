@@ -3,6 +3,13 @@ on:
   workflow_call:
     secrets:
       SOURCE_REPO_TOKEN:
+        required: false
+      SPINE_LICENSE:
+        required: false
+      SPINE_LINUX_URL:
+        required: false
+    secrets:
+      SOURCE_REPO_TOKEN:
         required: true
       SPINE_LICENSE:
         required: true
