@@ -21,6 +21,8 @@ class PublicRunnerAuditCoverageTests(unittest.TestCase):
         workflow = "strategy:\n  matrix:\n    os: [ubuntu-24.04, windows-latest, macos-latest]\njobs:\n  test:\n    runs-on: ${{ matrix.os }}\n"
         path = Path(".github/workflows/spine-mask-bridge-platform-tests.yml")
         self.assertTrue(runner_is_allowed(path, "${{ matrix.os }}", workflow))
+        self.assertTrue(runner_is_allowed(path, "windows-latest", workflow))
+        self.assertTrue(runner_is_allowed(path, "macos-latest", workflow))
         self.assertFalse(runner_is_allowed(Path("repo/.github/workflows/ci.yml"), "${{ matrix.os }}", workflow))
         self.assertFalse(runner_is_allowed(path, "self-hosted", workflow))
 
