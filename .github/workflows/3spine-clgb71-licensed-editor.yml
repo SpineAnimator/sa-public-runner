@@ -1284,7 +1284,7 @@ jobs:
           EOF
           gh release create "$TAG" \
             "$NATIVE_ZIP" "$ALL_FRAME_EVIDENCE" "$SELECTED_RGB_ZIP" \
-            --draft --latest=false --target "$GITHUB_SHA" \
+            --draft --latest=false --target "$THREESPINE_SHA" --repo "$GH_REPO" \
             --title "Private unapproved clgb71 native evidence run $GITHUB_RUN_ID" \
             --notes-file "$RUNNER_TEMP/clgb71-native-evidence-notes.txt"
           gh release view "$TAG" --repo "$GH_REPO" --json isDraft,tagName,assets > "$RUNNER_TEMP/private-release-view.json"
