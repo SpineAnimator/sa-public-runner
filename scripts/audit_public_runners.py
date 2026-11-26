@@ -24,6 +24,8 @@ def runner_is_allowed(path: Path, value: str, workflow_text: str) -> bool:
     if normalized == ".github/workflows/build-mask-bridge.yml":
         return value in {"windows-latest", "macos-latest"}
     if normalized == ".github/workflows/spine-mask-bridge-platform-tests.yml":
+        if value in {"windows-latest", "macos-latest"}:
+            return True
         if value != "${{ matrix.os }}":
             return False
         match = re.search(r"(?m)^\s*os:\s*\[([^]]+)\]\s*$", workflow_text)
