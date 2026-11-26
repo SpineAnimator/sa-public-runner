@@ -1,4 +1,4 @@
-name: External HTTP probe (public Ubuntu)
+name: External HTTP and Cloudflare Worker health probe (public Ubuntu)
 
 on:
   push:
@@ -19,24 +19,22 @@ permissions:
 jobs:
   external-http:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Probe external HTTPS and production health endpoints
+      - name: Probe public sites and worker health endpoints
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p probe
           failures=0
-          urls=(
+
+          basic_urls=(
             https://example.com/
             https://httpbin.org/status/200
             https://api.github.com/
             https://spine-link.vercel.app/
-            https://spine-archive.spine-animator-f8692224.workers.dev/health
-            https://spine-archive.spine-animator-f8692224.workers.dev/api/health
-            https://spine-psd-cache.spine-animator-f8692224.workers.dev/api/health
           )
-          for url in "${urls[@]}"; do
+          for url in "${basic_urls[@]}"; do
             name="$(printf '%s' "$url" | sed -E 's#https://##; s#[^A-Za-z0-9]+#_#g; s#_$##')"
             echo "=== $url ==="
             curl_rc=0
@@ -45,7 +43,7 @@ jobs:
               --write-out '%{http_code}' "$url")" || curl_rc=$?
             printf '%s\n' "${status:-000}" | tee "probe/${name}.status"
             sed -n '1,12p' "probe/${name}.headers" 2>/dev/null || true
-            head -c 600 "probe/${name}.body" 2>/dev/null || true
+            head -c 300 "probe/${name}.body" 2>/dev/null || true
             printf '\n'
             if [[ "$curl_rc" -ne 0 ]]; then
               echo "${url}: curl failed (exit ${curl_rc})" | tee -a probe/failures.txt
@@ -62,6 +60,71 @@ jobs:
               failures=1
             fi
           done
+
+          health_urls=(
+            https://spine-archive.vladyslavchaplygin.workers.dev/api/health
+            https://symbiotyc-remoteview-mcp.vladyslavchaplygin.workers.dev/health
+            https://3spine-public.spine-animator-f8692224.workers.dev/api/health
+            https://spine-archive.spine-animator-f8692224.workers.dev/health
+            https://spine-archive.spine-animator-f8692224.workers.dev/api/health
+            https://spine-drive-source.spine-animator-f8692224.workers.dev/api/health
+            https://spine-generator.spine-animator-f8692224.workers.dev/api/health
+            https://spine-plan-api.spine-animator-f8692224.workers.dev/api/health
+            https://spine-plan-workflow-test.spine-animator-f8692224.workers.dev/api/health
+            https://spine-psd-cache.spine-animator-f8692224.workers.dev/api/health
+            https://spine-studio.spine-animator-f8692224.workers.dev/api/health
+            https://spine-studio-mcp-canary.spine-animator-f8692224.workers.dev/api/health
+          )
+          for url in "${health_urls[@]}"; do
+            name="$(printf '%s' "$url" | sed -E 's#https://##; s#[^A-Za-z0-9]+#_#g; s#_$##')"
+            echo "=== health $url ==="
+            body_file="$(mktemp)"
+            curl_rc=0
+            status="$(curl --silent --show-error --location --max-time 20 --max-filesize 1048576 \
+              --output "$body_file" --dump-header "probe/${name}.headers" \
+              --write-out '%{http_code}' "$url")" || curl_rc=$?
+            printf '%s\n' "${status:-000}" | tee "probe/${name}.status"
+            # Health payloads can contain internal topology/queue details. Validate
+            # them in-memory and persist only the status/headers, never the body.
+            if [[ "$curl_rc" -ne 0 ]]; then
+              echo "${url}: curl failed (exit ${curl_rc})" | tee -a probe/failures.txt
+              failures=1
+            elif [[ "$status" != "200" ]]; then
+              echo "${url}: expected HTTP 200, got ${status}" | tee -a probe/failures.txt
+              failures=1
+            elif ! jq -e '(.ok == true) or (.status == "ready") or (.status == "ok") or (.status == "healthy")' "$body_file" >/dev/null 2>&1; then
+              echo "${url}: health JSON did not report a ready state" | tee -a probe/failures.txt
+              failures=1
+            else
+              echo "health_payload=ready" | tee "probe/${name}.summary"
+            fi
+            rm -f "$body_file"
+          done
+
+          reachability_urls=(
+            https://spine-mask-native-gateway.vladyslavchaplygin.workers.dev/
+            https://spine-mask-private-screenshot.vladyslavchaplygin.workers.dev/
+            https://symbiotyc-browser-mcp.vladyslavchaplygin.workers.dev/mcp
+            https://featherchhat.vladyslavchaplygin.workers.dev/
+            https://spine-cherry-original-ingest.spine-animator-f8692224.workers.dev/
+          )
+          for url in "${reachability_urls[@]}"; do
+            name="$(printf '%s' "$url" | sed -E 's#https://##; s#[^A-Za-z0-9]+#_#g; s#_$##')"
+            echo "=== reachability $url ==="
+            curl_rc=0
+            status="$(curl --silent --show-error --location --head --max-time 20 \
+              --output /dev/null --dump-header "probe/${name}.headers" \
+              --write-out '%{http_code}' "$url")" || curl_rc=$?
+            printf '%s\n' "${status:-000}" | tee "probe/${name}.status"
+            if [[ "$curl_rc" -ne 0 ]]; then
+              echo "${url}: curl failed (exit ${curl_rc})" | tee -a probe/failures.txt
+              failures=1
+            elif [[ ! "$status" =~ ^[234][0-9][0-9]$ ]]; then
+              echo "${url}: expected an HTTP response below 500, got ${status}" | tee -a probe/failures.txt
+              failures=1
+            fi
+          done
+
           {
             echo "runner=$(uname -a)"
             echo "date_utc=$(date -u +%FT%TZ)"
@@ -69,10 +132,13 @@ jobs:
             for f in probe/*.status; do
               printf '%s=%s\n' "$(basename "$f" .status)" "$(cat "$f")"
             done
+            for f in probe/*.summary; do
+              printf '%s=%s\n' "$(basename "$f" .summary)" "$(cat "$f")"
+            done
             echo "failures=${failures}"
           } | tee probe/summary.txt
           echo "$failures" > probe/failure-exit-code.txt
-      - name: Upload raw HTTP evidence
+      - name: Upload sanitized HTTP evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
