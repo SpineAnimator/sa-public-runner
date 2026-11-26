@@ -1,0 +1,41 @@
+name: Public Ubuntu runner probe
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  public-ubuntu:
+    name: GitHub-hosted Ubuntu 24.04 executor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Identify the public executor and available toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sa-runner-probe"
+          {
+            echo "repository=$GITHUB_REPOSITORY"
+            echo "workflow_ref=$GITHUB_WORKFLOW_REF"
+            echo "sha=$GITHUB_SHA"
+            echo "runner_name=$RUNNER_NAME"
+            echo "runner_os=$RUNNER_OS"
+            echo "runner_arch=$RUNNER_ARCH"
+            echo "image_os=${ImageOS:-unknown}"
+            echo "image_version=${ImageVersion:-unknown}"
+            cat /etc/os-release
+            uname -a
+            python3 --version
+            node --version
+            npm --version
+            df -h
+          } | tee "$RUNNER_TEMP/sa-runner-probe/diagnostics.txt"
+          grep -q 'Ubuntu 24.04' /etc/os-release
+          echo 'SA_PUBLIC_UBUNTU_24_04_EXECUTOR_PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain runner diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-ubuntu-runner-diagnostics
+          path: ${{ runner.temp }}/sa-runner-probe/
+          retention-days: 3
