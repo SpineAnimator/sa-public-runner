@@ -14,7 +14,7 @@ concurrency:
 jobs:
   ai-to-spine:
     name: Synthetic sprite → AI plan → Spine 4.3.26 ZIP
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
