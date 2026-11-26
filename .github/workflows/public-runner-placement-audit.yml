@@ -103,9 +103,8 @@ jobs:
                           and value in {"windows-latest", "macos-latest"}
                       )
                       bridge_matrix = (
-                          path.name == "spine-mask-bridge-platform-tests.yml"
-                          and value.replace(" ", "") == "${{matrix.os}}"
-                          and "ubuntu-24.04, windows-latest, macos-latest" in text
+                          value.replace(" ", "") == "${{matrix.os}}"
+                          and "os: [ubuntu-24.04, windows-latest, macos-latest]" in text
                       )
                       legacy_macos = (
                           value == "macos-latest"
