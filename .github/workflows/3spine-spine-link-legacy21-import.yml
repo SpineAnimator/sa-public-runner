@@ -1,0 +1,110 @@
+name: Public Ubuntu executor | spine link legacy21 import
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  inspect-import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    env:
+      SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
+      SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - name: Checkout the exact original data only
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/spine
+          ref: main
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /library_02/Spine-animation-2026-11-18T12-11-23-130Z/
+      - name: Validate original source triad
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=library_02/Spine-animation-2026-11-18T12-11-23-130Z
+          test -s "$DIR/highwayman.sprite.walk.skel"
+          test -s "$DIR/highwayman.sprite.walk.atlas"
+          test -s "$DIR/highwayman.sprite.walk.png"
+          echo 'LEGACY_SOURCE_TRIAD_PRESENT'
+      - name: Install licensed Spine Editor on isolated Linux runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SPINE_LICENSE" || { echo '::error::SPINE_LICENSE not configured'; exit 1; }
+          test -n "$SPINE_LINUX_URL" || { echo '::error::SPINE_LINUX_URL not configured'; exit 1; }
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb x11-utils x11-xserver-utils \
+            libxrandr2 libgl1-mesa-dri libgl1 libxrender1 libxi6 libxext6 libxfixes3 libxcursor1
+          curl --fail --location --silent --show-error --max-time 600 --retry 2 \
+            -A 'Mozilla/5.0 (X11; Linux x86_64)' \
+            "$SPINE_LINUX_URL" -o "$RUNNER_TEMP/spine-linux.gz"
+          gzip -t "$RUNNER_TEMP/spine-linux.gz"
+          mkdir -p "$RUNNER_TEMP/installed"
+          gzip -dc "$RUNNER_TEMP/spine-linux.gz" | tar -xf - -C "$RUNNER_TEMP/installed"
+          CLI="$RUNNER_TEMP/installed/Spine/Spine.sh"
+          test -x "$CLI"
+          echo "SPINE_CLI=$CLI" >> "$GITHUB_ENV"
+      - name: Attempt genuine import via compatible licensed Editor versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT="$GITHUB_WORKSPACE/library_02/Spine-animation-2026-11-18T12-11-23-130Z/highwayman.sprite.walk.skel"
+          mkdir -p "$RUNNER_TEMP/legacy" "$GITHUB_WORKSPACE/converted"
+          success=false
+          for version in 4.3.26 3.8.99 3.4.02; do
+            project="$RUNNER_TEMP/legacy/imported.spine"
+            rm -f "$project"
+            set +e
+            printf '%s\n' "$SPINE_LICENSE" | timeout 180 xvfb-run -a \
+              "$SPINE_CLI" --update "$version" --input "$INPUT" \
+              --output "$project" --import >"$RUNNER_TEMP/legacy/import.log" 2>&1
+            status=$?
+            set -e
+            if [[ $status -eq 0 && -s "$project" ]]; then
+              echo "LEGACY_IMPORT_ACCEPTED_BY=$version"
+              success=true
+              break
+            fi
+            echo "LEGACY_IMPORT_NOT_ACCEPTED_BY=$version STATUS=$status"
+          done
+          if [[ "$success" != true ]]; then
+            echo '::error::Old 2.1.27 binary could not be imported by licensed CLI; no synthetic video or dummy texture will be published'
+            exit 1
+          fi
+          printf '%s\n' "$SPINE_LICENSE" | timeout 180 xvfb-run -a \
+            "$SPINE_CLI" --update 4.3.26 --input "$project" \
+            --output "$GITHUB_WORKSPACE/converted" --export json \
+            >"$RUNNER_TEMP/legacy/export.log" 2>&1
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const folder='converted';
+          const file=fs.readdirSync(folder).find(f=>f.endsWith('.json'));
+          if(!file)throw Error('Modern JSON output missing');
+          const json=JSON.parse(fs.readFileSync(folder+'/'+file,'utf8'));
+          const version=String(json.skeleton?.spine||'');
+          const animations=Object.keys(json.animations||{});
+          if(!version.startsWith('4.3.')||animations.length===0||!json.bones?.length)
+            throw Error('Converted output is not a valid animated Spine 4.3 skeleton');
+          console.log('LEGACY_MIGRATION_JSON_PASS version='+version+' animations='+animations.length);
+          NODE
+      - name: Store private conversion evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spine-link-legacy21-converted-json
+          path: converted/*.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Deactivate temporary license
+        if: always()
+        shell: bash
+        run: |
+          if [[ -x "$SPINE_CLI" ]]; then
+            timeout 180 xvfb-run -a "$SPINE_CLI" -l >/dev/null 2>&1 || true
+          fi
