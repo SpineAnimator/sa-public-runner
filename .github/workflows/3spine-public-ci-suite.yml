@@ -142,6 +142,24 @@ jobs:
           test -d "$RUNNER_TEMP/dryrun"
           echo "ASSETS_DRYRUN_OK"
 
+  spine-mask-gateway-unit:
+    name: Spine Mask Native Gateway auth regression tests • public Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout private 3Spine source
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/3Spine-core
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test private gateway auth retry and session security
+        run: node --test tests/spine-mask-v2-gateway.test.mjs
+
   public-site-health:
     name: Public Spine site and API health • public Ubuntu
     runs-on: ubuntu-24.04
