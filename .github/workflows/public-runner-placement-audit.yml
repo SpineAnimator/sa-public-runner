@@ -102,8 +102,9 @@ jobs:
                           path.name in {"build-mask-bridge.yml", "spine-mask-bridge-platform-tests.yml"}
                           and value in {"windows-latest", "macos-latest"}
                       )
+                      expected_matrix_runner = "$" + "{{ matrix.os }}"
                       bridge_matrix = (
-                          value.replace(" ", "") == "${{matrix.os}}"
+                          value.replace(" ", "") == expected_matrix_runner.replace(" ", "")
                           and "os: [ubuntu-24.04, windows-latest, macos-latest]" in text
                       )
                       legacy_macos = (
