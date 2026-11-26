@@ -16,6 +16,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Checkout the Bridge source repository to verify thin delegation
+        uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/Spine-Resize
+          ref: main
+          path: repos/spine-resize
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test Bridge platform jobs are delegated to this public executor
+        run: python -m unittest discover -s tests -p test_bridge_public_executor_contract.py -v
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
