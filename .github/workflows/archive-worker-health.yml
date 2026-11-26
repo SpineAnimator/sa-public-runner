@@ -15,7 +15,7 @@ concurrency:
 jobs:
   health:
     name: Verify selected Cloudflare account Workers (read-only)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
       - name: Check archive manifest health without uploading data
