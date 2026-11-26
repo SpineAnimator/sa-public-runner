@@ -120,7 +120,7 @@ jobs:
           test -s frontend/js/jszip.min.js
           test -s frontend/vendor/spine-canvas-3.7.js
           test -s frontend/vendor/spine-canvas-4.3.13.js
-          if find frontend -type f | grep -Ev '\.(html|css|js|png); then exit 1; fi
+          if find frontend -type f | grep -Ev '\.(html|css|js|png)$'; then exit 1; fi
           if grep -Ei 'github_pat_|ghp_[A-Za-z0-9]{20}|BEGIN .*PRIVATE KEY|SPINE_LICENSE|CLOUDFLARE_API_TOKEN' frontend/index.html frontend/preview.html frontend/js/app.js; then
             echo '::error::Possible secret embedded in public frontend assets'
             exit 1
