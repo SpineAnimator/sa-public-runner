@@ -1,0 +1,49 @@
+name: Public runner reusable workflow contract
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spine-mask-full-project-ubuntu.yml'
+      - '.github/workflows/public-ubuntu-runner-probe.yml'
+      - '.github/workflows/private-node-validation-macos.yml'
+      - '.github/workflows/spine-mask-workflow-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actionlint:
+    name: Validate public reusable workflows on Ubuntu 24.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.0'
+          cache: false
+      - name: Lint reusable workflow contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
+            .github/workflows/spine-mask-full-project-ubuntu.yml \
+            .github/workflows/public-ubuntu-runner-probe.yml \
+            .github/workflows/private-node-validation-macos.yml
+      - name: Reject private executor labels in reusable Ubuntu workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          for workflow in \
+            .github/workflows/spine-mask-full-project-ubuntu.yml \
+            .github/workflows/public-ubuntu-runner-probe.yml \
+            .github/workflows/private-node-validation-macos.yml; do
+            grep -Fq 'workflow_call:' "$workflow"
+            grep -Fq 'runs-on: ubuntu-24.04' "$workflow"
+            if grep -Eq 'runs-on:.*self-hosted' "$workflow"; then
+              echo "::error::Private runner label found in $workflow"
+              exit 1
+            fi
+          done
+          echo 'SA_PUBLIC_REUSABLE_WORKFLOWS_USE_GITHUB_HOSTED_UBUNTU_PASS' >> "$GITHUB_STEP_SUMMARY"
