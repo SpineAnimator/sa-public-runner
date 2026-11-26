@@ -1,0 +1,182 @@
+name: Public Ubuntu executor | spine link latest20 legacy convert
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  convert:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    env:
+      SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
+      SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - name: Checkout only the seven original Spine source folders
+        uses: actions/checkout@v4
+        with:
+          repository: vladleopold/spine
+          ref: main
+          token: ${{ secrets.ACCESS_TOKEN }}
+          path: storage
+          persist-credentials: true
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /library_02/Spine-animation-2026-11-19T11-15-24-400Z/
+            /library_02/Spine-animation-2026-11-18T12-11-23-130Z/
+            /library_02/Spine-animation-2026-11-19T08-34-42-243Z/
+            /library_02/castle_upgrade-2026-11-19T07-33-26-823Z/
+            /library_02/castle_upgrade-2026-11-19T07-30-55-171Z/
+            /library_02/Spine-animation-2026-11-18T03-38-09-932Z/
+            /library_02/Spine-animation-2026-11-19T03-01-41-552Z/
+
+      - name: Validate authorized storage and licensed editor configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SPINE_LICENSE" || { echo '::error::SPINE_LICENSE missing'; exit 1; }
+          test -n "$SPINE_LINUX_URL" || { echo '::error::SPINE_LINUX_URL missing'; exit 1; }
+          git -C storage remote -v | sed 's#https://[^@]*@#https://***@#g'
+          echo 'LEGACY_MIGRATION_AUTH_CONFIGURED'
+
+      - name: Install licensed Spine Editor 4.3.26 on isolated Linux runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb x11-utils x11-xserver-utils \
+            libxrandr2 libgl1-mesa-dri libgl1 libxrender1 libxi6 libxext6 libxfixes3 libxcursor1
+          curl --fail --location --silent --show-error --max-time 600 --retry 2 \
+            -A 'Mozilla/5.0 (X11; Linux x86_64)' \
+            "$SPINE_LINUX_URL" -o "$RUNNER_TEMP/spine-linux.gz"
+          gzip -t "$RUNNER_TEMP/spine-linux.gz"
+          mkdir -p "$RUNNER_TEMP/installed"
+          gzip -dc "$RUNNER_TEMP/spine-linux.gz" | tar -xf - -C "$RUNNER_TEMP/installed"
+          CLI="$RUNNER_TEMP/installed/Spine/Spine.sh"
+          test -x "$CLI"
+          echo "SPINE_CLI=$CLI" >> "$GITHUB_ENV"
+          echo 'LICENSED_SPINE_EDITOR_READY'
+
+      - name: Import original skeletons and export same animations as Spine 4.3 JSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/legacy-migration"
+          cat > "$RUNNER_TEMP/entries.tsv" <<'EOF'
+          Spine-animation-2026-11-19T11-15-24-400Z|Marika.sprite.walk.skel|
+          Spine-animation-2026-11-18T12-11-23-130Z|highwayman.sprite.walk.skel|
+          Spine-animation-2026-11-19T08-34-42-243Z|skeleton.skel|
+          castle_upgrade-2026-11-19T07-33-26-823Z|castle_upgrade.json|
+          castle_upgrade-2026-11-19T07-30-55-171Z|castle_upgrade.json|
+          Spine-animation-2026-11-18T03-38-09-932Z|basic_titan_time_3_HD_spine-3-8-59_dxt5.skel|attack
+          Spine-animation-2026-11-19T03-01-41-552Z|c20256.skel|
+          EOF
+          successes=0
+          failures=0
+          while IFS='|' read -r id skeleton default_animation; do
+            [[ -n "$id" ]] || continue
+            dir="$GITHUB_WORKSPACE/storage/library_02/$id"
+            stem="${skeleton%.*}"
+            source="$dir/$skeleton"
+            alias=""
+            test -s "$source" || { echo "MIGRATION_SOURCE_MISSING id=$id"; failures=$((failures+1)); continue; }
+            test -s "$dir/$stem.atlas" || { echo "MIGRATION_ATLAS_MISSING id=$id"; failures=$((failures+1)); continue; }
+            if [[ "$skeleton" == *.json ]]; then
+              if node --input-type=module -e 'import fs from "node:fs";const p=process.argv[1];try{const j=JSON.parse(fs.readFileSync(p,"utf8"));process.exit(Array.isArray(j.bones)?0:1)}catch{process.exit(1)}' "$source"; then
+                echo "MIGRATION_ALREADY_JSON id=$id"
+                continue
+              fi
+              if [[ ! -s "$dir/$stem.source.skel" ]]; then cp "$source" "$dir/$stem.source.skel"; fi
+              alias="$dir/$stem.skel"
+              cp "$source" "$alias"
+              input="$alias"
+            else
+              input="$source"
+            fi
+            work="$RUNNER_TEMP/legacy-migration/$id"
+            project="$work/imported.spine"
+            converted="$work/converted"
+            mkdir -p "$work" "$converted"
+            imported=false
+            for version in 4.3.26 3.8.99 3.4.02; do
+              rm -f "$project"
+              set +e
+              printf '%s\n' "$SPINE_LICENSE" | timeout 300 xvfb-run -a \
+                "$SPINE_CLI" --update "$version" --input "$input" \
+                --output "$project" --import >"$work/import-$version.log" 2>&1
+              status=$?
+              set -e
+              if [[ $status -eq 0 && -s "$project" ]]; then
+                echo "LEGACY_IMPORT_PASS id=$id editor=$version"
+                imported=true
+                break
+              fi
+              echo "LEGACY_IMPORT_RETRY id=$id editor=$version status=$status"
+            done
+            if [[ "$imported" != true ]]; then
+              echo "LEGACY_IMPORT_FAILED id=$id"
+              tail -n 30 "$work/import-4.3.26.log" || true
+              [[ -z "$alias" ]] || rm -f "$alias"
+              failures=$((failures+1))
+              continue
+            fi
+            set +e
+            printf '%s\n' "$SPINE_LICENSE" | timeout 300 xvfb-run -a \
+              "$SPINE_CLI" --update 4.3.26 --input "$project" \
+              --output "$converted" --export json >"$work/export.log" 2>&1
+            export_status=$?
+            set -e
+            if [[ $export_status -ne 0 ]]; then
+              echo "LEGACY_EXPORT_FAILED id=$id status=$export_status"
+              tail -n 40 "$work/export.log" || true
+              [[ -z "$alias" ]] || rm -f "$alias"
+              failures=$((failures+1))
+              continue
+            fi
+            node --input-type=module - "$converted" "$dir/$stem.json" "$default_animation" "$id" <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const [folder,target,preferred,id]=process.argv.slice(2);
+          const files=fs.readdirSync(folder).filter(name=>name.toLowerCase().endsWith('.json'));
+          const candidates=files.map(name=>({name,json:JSON.parse(fs.readFileSync(path.join(folder,name),'utf8'))}))
+            .filter(x=>Array.isArray(x.json.bones)&&String(x.json.skeleton?.spine||'').startsWith('4.3.'));
+          const picked=candidates.find(x=>preferred&&Object.hasOwn(x.json.animations||{},preferred))||
+            candidates.sort((a,b)=>(Object.keys(b.json.animations||{}).length-Object.keys(a.json.animations||{}).length))[0];
+          if(!picked)throw new Error('No valid Spine 4.3 JSON export for '+id);
+          const animations=Object.keys(picked.json.animations||{});
+          if(!animations.length)throw new Error('Converted skeleton has no original animations: '+id);
+          if(preferred&&!animations.includes(preferred))throw new Error('Original selected animation was lost: '+preferred);
+          fs.copyFileSync(path.join(folder,picked.name),target);
+          console.log('LEGACY_JSON_PASS id='+id+' version='+picked.json.skeleton.spine+
+            ' animations='+animations.join(','));
+          NODE
+            if [[ -n "$alias" ]]; then rm -f "$alias"; fi
+            test -s "$dir/$stem.json" || { echo "MIGRATION_OUTPUT_MISSING id=$id"; failures=$((failures+1)); continue; }
+            git -C storage add "$dir/$stem.json"
+            if [[ -s "$dir/$stem.source.skel" ]]; then git -C storage add "$dir/$stem.source.skel"; fi
+            successes=$((successes+1))
+          done < "$RUNNER_TEMP/entries.tsv"
+          echo "LEGACY_MIGRATION_SUMMARY successes=$successes failures=$failures"
+          if (( successes == 0 )); then
+            echo '::error::No legacy skeleton was converted; source files remain unchanged'
+            exit 1
+          fi
+          git -C storage config user.name "github-actions[bot]"
+          git -C storage config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git -C storage diff --cached --quiet; then
+            git -C storage commit -m "fix(preview): convert legacy Spine source skeletons to 4.3 JSON"
+            git -C storage push origin HEAD:main
+          fi
+          if (( failures > 0 )); then
+            echo '::warning::Some legacy imports remain unsupported; successful original-preserving conversions were committed'
+          fi
+
+      - name: Deactivate licensed Spine Editor on ephemeral runner
+        if: always()
+        shell: bash
+        run: |
+          if [[ -x "${SPINE_CLI:-}" ]]; then
+            timeout 180 xvfb-run -a "$SPINE_CLI" -l >/dev/null 2>&1 || true
+          fi
