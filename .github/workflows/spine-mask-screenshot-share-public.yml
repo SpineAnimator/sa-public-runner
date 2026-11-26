@@ -28,7 +28,7 @@ jobs:
           test "$GH_REPO" = 'vladleopold/3Spine-core'
           umask 077
           gh api "repos/$GH_REPO/git/blobs/532b885d363a9ecbc540faecbff84ba68e37d9ea" --jq .content \
-            | tr -d '\n' | base64 -d | base64 -d > "$RUNNER_TEMP/native-editor.png"
+            | tr -d '\n' | base64 -d > "$RUNNER_TEMP/native-editor.png"
           python3 - <<'PY'
           import struct,os
           p=os.environ['RUNNER_TEMP']+'/native-editor.png'
