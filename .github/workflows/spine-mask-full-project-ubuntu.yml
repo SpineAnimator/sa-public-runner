@@ -9,7 +9,7 @@ on:
         default: true
     secrets:
       SOURCE_REPO_TOKEN:
-        required: false
+        required: true
       SPINE_LICENSE:
         required: false
       SPINE_LINUX_URL:
@@ -83,7 +83,7 @@ jobs:
     timeout-minutes: 35
     env:
       SPINE_MASK_GATEWAY: https://spine-mask-native-gateway.vladyslavchaplygin.workers.dev
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
       SPINE_LICENSE: ${{ secrets.SPINE_LICENSE }}
       SPINE_LINUX_URL: ${{ secrets.SPINE_LINUX_URL }}
       LIBGL_ALWAYS_SOFTWARE: '1'
