@@ -10,6 +10,7 @@ on:
     paths:
       - '.github/workflows/*.yml'
       - 'tests/test_spine_mask_gateway_auth_contract.py'
+      - 'tests/test_bridge_public_executor_contract.py'
   workflow_dispatch:
 permissions:
   contents: read
