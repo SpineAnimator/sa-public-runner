@@ -1,0 +1,36 @@
+name: SA edge runtime regression suite on public Ubuntu
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  edge-runtime-tests:
+    name: SA regression suite • public Ubuntu 24.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout calling repository and exact PR/commit revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check changed SA runtime JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in engine/sa-agent.js engine/sa-agent-runtime.js engine/sa-agent-mask-bridge.js engine/sa-agent-shine-bridge.js engine/spine-shine-art-direction.js engine/sa-production-adapters.js app.js; do
+            if [ -f "$file" ]; then node --check "$file"; fi
+          done
+      - name: Run focused SpineShine and SA runtime contracts
+        run: node --test tests/spine-shine.test.cjs tests/sa-agent-runtime.test.cjs tests/sa-production-adapters.test.cjs tests/sa-agent-shine-bridge.test.cjs
+      - name: Run complete repository regression suite
+        run: npm test
