@@ -26,8 +26,12 @@ Free, ephemeral Ubuntu Linux CI workspace for task-scoped SA code and test valid
 Do not commit credentials, access tokens, passwords, customer account data, original user uploads,
 licensed Spine Editor binaries/assets, or confidential task deliverables here. Task source modules
 and tests deliberately transferred from the private SA repository are visible to everyone because
-this repository is public. Workflows receive no repository secrets, use read-only repository
-permissions, and checkout without persisting credentials. Treat task-branch contents as untrusted executable code.
+this repository is public. Ordinary task workflows use read-only repository permissions and do not
+receive repository secrets. The dedicated `.github/workflows/sa-private-spine-animator-tests.yml`
+workflow is an explicit exception: it requires the Actions secret `SOURCE_REPO_TOKEN` with
+read-only access to `SpineAnimator/spine-animator-private` so it can check out private source.
+Never expose that secret in logs, artifacts, task branches or source files. All checkouts must avoid
+persisting credentials. Treat task-branch contents as untrusted executable code.
 
 This runner validates public fixtures and isolated components. It does not by itself prove
 private-repository integration, PSD extraction fidelity, Spine ZIP correctness, or licensed
