@@ -5,6 +5,11 @@ on:
     paths:
       - '.github/workflows/*.yml'
       - 'tests/test_bridge_public_executor_contract.py'
+      - 'tests/test_spine_mask_gateway_auth_contract.py'
+  pull_request:
+    paths:
+      - '.github/workflows/*.yml'
+      - 'tests/test_spine_mask_gateway_auth_contract.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,6 +36,7 @@ jobs:
         run: |
           python -m unittest discover -s tests -p test_bridge_public_executor_contract.py -v
           python -m unittest discover -s tests -p test_saver_public_executor_contract.py -v
+          python -m unittest discover -s tests -p test_spine_mask_gateway_auth_contract.py -v
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
