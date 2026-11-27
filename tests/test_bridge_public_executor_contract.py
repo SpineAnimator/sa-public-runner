@@ -50,6 +50,13 @@ class BridgePublicExecutorContractTests(unittest.TestCase):
         self.assertNotIn("${{ matrix.os }}", audit)
         self.assertNotIn("${{ matrix.os }}", contract)
 
+    def test_native_bridge_security_checks_are_shellcheck_safe(self):
+        source = (ROOT / ".github" / "workflows" / "mask-native-bridge.yml").read_text(encoding="utf-8")
+        self.assertNotRegex(source, r"(?m)^\\s*!\\s*grep\\b")
+        self.assertIn("if grep -n", source)
+        self.assertIn("then", source)
+        self.assertIn("exit 1", source)
+
     def test_platform_contracts_use_only_the_explicit_public_os_matrix(self):
         source = (ROOT / ".github" / "workflows" / "spine-mask-bridge-platform-tests.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_call:", source)
