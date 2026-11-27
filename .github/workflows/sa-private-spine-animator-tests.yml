@@ -1,0 +1,70 @@
+name: SA private Spine Animator regression suite
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      source-ref:
+        description: Exact branch, tag, or commit in SpineAnimator/spine-animator-private
+        required: false
+        type: string
+        default: feature/adaptive-spine-shine
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sa-private-spine-animator-tests.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sa-private-spine-animator-regressions
+  cancel-in-progress: false
+
+jobs:
+  test-private-source:
+    name: Spine Animator private source • public Ubuntu 24.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Require private source checkout credential
+        shell: bash
+        env:
+          SOURCE_REPO_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SOURCE_REPO_TOKEN" ]; then
+            echo "::error::SOURCE_REPO_TOKEN is required to checkout the private Spine Animator source."
+            exit 1
+          fi
+      - name: Checkout exact private Spine Animator source
+        uses: actions/checkout@v4
+        with:
+          repository: SpineAnimator/spine-animator-private
+          ref: ${{ inputs.source-ref || 'feature/adaptive-spine-shine' }}
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          path: private-source
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache-dependency-path: private-source/package-lock.json
+      - name: Install locked dependencies
+        working-directory: private-source
+        run: npm ci
+      - name: Check SA and SpineShine JavaScript syntax
+        working-directory: private-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in engine/sa-agent.js engine/sa-agent-runtime.js engine/sa-agent-mask-bridge.js engine/sa-agent-shine-bridge.js engine/spine-shine-art-direction.js engine/sa-production-adapters.js app.js; do
+            if [ -f "$file" ]; then node --check "$file"; fi
+          done
+      - name: Run focused SpineShine and SA runtime contracts
+        working-directory: private-source
+        run: node --test tests/spine-shine.test.cjs tests/sa-agent-runtime.test.cjs tests/sa-production-adapters.test.cjs tests/sa-agent-shine-bridge.test.cjs
+      - name: Run complete private repository regression suite
+        working-directory: private-source
+        run: npm test
