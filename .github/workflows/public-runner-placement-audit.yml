@@ -128,5 +128,6 @@ jobs:
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
             .github/workflows/public-runner-placement-audit.yml \
             .github/workflows/sa-edge-runtime-tests.yml \
+            .github/workflows/sa-private-spine-animator-tests.yml \
             repos/Spine-Link-project-export/.github/workflows/runner.yml \
             repos/spine-link-computer/.github/workflows/ci.yml
