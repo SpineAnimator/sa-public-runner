@@ -44,6 +44,12 @@ class BridgePublicExecutorContractTests(unittest.TestCase):
             self.assertNotIn("runs-on:", source)
             self.assertNotIn("steps:", source)
 
+    def test_workflow_matrix_literals_are_not_interpolated_by_github(self):
+        audit = (ROOT / ".github" / "workflows" / "public-runner-placement-audit.yml").read_text(encoding="utf-8")
+        contract = (ROOT / ".github" / "workflows" / "spine-mask-workflow-contract.yml").read_text(encoding="utf-8")
+        self.assertNotIn("${{ matrix.os }}", audit)
+        self.assertNotIn("${{ matrix.os }}", contract)
+
     def test_platform_contracts_use_only_the_explicit_public_os_matrix(self):
         source = (ROOT / ".github" / "workflows" / "spine-mask-bridge-platform-tests.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_call:", source)
